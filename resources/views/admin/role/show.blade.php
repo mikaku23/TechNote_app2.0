@@ -48,15 +48,24 @@
 
             <div class="tn-modal-group">
                 <label>Role Name</label>
-
                 <div class="tn-modal-control tn-modal-readonly">
                     {{ $role->name }}
                 </div>
             </div>
 
             <div class="tn-modal-group">
-                <label>Created At</label>
+                <label>Status</label>
+                <div class="tn-modal-control tn-modal-readonly">
+                    @if($role->is_active)
+                    <span class="badge success">Active</span>
+                    @else
+                    <span class="badge danger">Inactive</span>
+                    @endif
+                </div>
+            </div>
 
+            <div class="tn-modal-group">
+                <label>Created At</label>
                 <div class="tn-modal-control tn-modal-readonly">
                     {{ $role->created_at->format('d M Y H:i') }}
                 </div>
@@ -64,26 +73,21 @@
 
             <div class="tn-modal-group">
                 <label>Updated At</label>
-
                 <div class="tn-modal-control tn-modal-readonly">
                     {{ $role->updated_at->format('d M Y H:i') }}
                 </div>
             </div>
 
             <div class="tn-modal-group tn-modal-full">
-
                 <label>Description</label>
-
                 <div class="tn-modal-control tn-modal-readonly tn-modal-description">
                     {{ $role->description ?? 'No description available.' }}
                 </div>
-
             </div>
 
         </div>
 
         <div class="tn-modal-actions">
-
             <button
                 type="button"
                 class="btn-secondary close-modal">

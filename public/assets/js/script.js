@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeModalLoader();
     initializeModalClose();
     initializeSidebarState();
+    initializeGlobalConfirmModal();
 });
 
 /* ==========================
@@ -695,6 +696,169 @@ function initializeModalClose() {
         const closeBtn = e.target.closest(".close-modal");
         if (closeBtn) {
             container.innerHTML = "";
+        }
+    });
+}
+
+let tnConfirmForm = null;
+let tnConfirmCallback = null;
+
+function initializeGlobalConfirmModal() {
+    const overlay = document.getElementById("tnConfirmOverlay");
+    const titleEl = document.getElementById("tnConfirmTitle");
+    const messageEl = document.getElementById("tnConfirmMessage");
+    const iconWrap = document.getElementById("tnConfirmIconWrap");
+    const iconEl = document.getElementById("tnConfirmIcon");
+    const proceedBtn = document.getElementById("tnConfirmProceed");
+    const cancelBtn = document.getElementById("tnConfirmCancel");
+    const closeBtn = document.getElementById("tnConfirmClose");
+
+    if (
+        !overlay ||
+        !titleEl ||
+        !messageEl ||
+        !proceedBtn ||
+        !cancelBtn ||
+        !closeBtn
+    ) {
+        return;
+    }
+
+    function openConfirm(options = {}) {
+        const {
+            title = "Confirmation",
+            message = "Are you sure you want to continue?",
+            type = "warning",
+            proceedText = "Continue",
+            form = null,
+            callback = null,
+            showProceed = true,
+        } = options;
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        proceedBtn.innerHTML = `<i data-lucide="check"></i>${proceedText}`;
+        proceedBtn.style.display = showProceed ? "" : "none";
+
+        overlay.classList.add("show");
+        overlay.setAttribute("aria-hidden", "false");
+        document.body.classList.add("overflow-hidden");
+
+        overlay.classList.remove(
+            "tn-confirm-type-warning",
+            "tn-confirm-type-danger",
+            "tn-confirm-type-success",
+        );
+        overlay.classList.add(`tn-confirm-type-${type}`);
+
+        tnConfirmForm = form;
+        tnConfirmCallback = callback || null;
+
+        if (iconWrap && iconEl) {
+            let iconName = "alert-triangle";
+            if (type === "danger") iconName = "trash-2";
+            if (type === "success") iconName = "check-circle-2";
+            iconEl.setAttribute("data-lucide", iconName);
+            lucide?.createIcons();
+        }
+    }
+
+    function closeConfirm() {
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("overflow-hidden");
+        tnConfirmForm = null;
+        tnConfirmCallback = null;
+        proceedBtn.style.display = "";
+    }
+
+    function proceedConfirm() {
+        if (tnConfirmForm) {
+            tnConfirmForm.submit();
+        } else if (typeof tnConfirmCallback === "function") {
+            tnConfirmCallback();
+        }
+        closeConfirm();
+    }
+
+    document.addEventListener("click", (e) => {
+        const confirmTarget = e.target.closest("[data-tn-confirm]");
+        const blockedTarget = e.target.closest("[data-tn-blocked]");
+
+        if (blockedTarget) {
+            e.preventDefault();
+
+            const onlyCancel =
+                blockedTarget.dataset.tnOnlyCancel === "true" ||
+                blockedTarget.hasAttribute("data-tn-only-cancel");
+
+            openConfirm({
+                title: blockedTarget.dataset.tnTitle || "Action blocked",
+                message:
+                    blockedTarget.dataset.tnMessage ||
+                    "This action is currently not allowed.",
+                type: blockedTarget.dataset.tnType || "warning",
+                proceedText:
+                    blockedTarget.dataset.tnProceedText || "Understood",
+                callback: onlyCancel ? null : () => {},
+                showProceed: !onlyCancel,
+            });
+
+            return;
+        }
+
+        if (!confirmTarget) return;
+
+        const form = confirmTarget.closest("form");
+        const title = confirmTarget.dataset.tnTitle || "Confirm action";
+        const message =
+            confirmTarget.dataset.tnMessage ||
+            "Are you sure you want to continue?";
+        const type = confirmTarget.dataset.tnType || "warning";
+        const proceedText = confirmTarget.dataset.tnProceedText || "Continue";
+
+        e.preventDefault();
+
+        const url = confirmTarget.dataset.tnUrl || null;
+
+        let callback = null;
+        if (url) {
+            callback = async () => {
+                try {
+                    const response = await fetch(url);
+                    const html = await response.text();
+                    const container = document.getElementById("modalContainer");
+                    if (container) {
+                        container.innerHTML = html;
+                        lucide?.createIcons();
+                    }
+                } catch (err) {
+                    console.error("Failed to load URL for confirm:", err);
+                }
+            };
+        }
+
+        openConfirm({
+            title,
+            message,
+            type,
+            proceedText,
+            form,
+            callback,
+        });
+    });
+
+    proceedBtn.addEventListener("click", proceedConfirm);
+    cancelBtn.addEventListener("click", closeConfirm);
+    closeBtn.addEventListener("click", closeConfirm);
+
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) closeConfirm();
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && overlay.classList.contains("show")) {
+            closeConfirm();
         }
     });
 }

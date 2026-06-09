@@ -25,6 +25,18 @@ Route::delete(
 )->name('software.destroyAll');
 
 Route::resource('software', SoftwareController::class);
+
+Route::get('/role/trash', [RoleController::class, 'trash'])
+    ->name('role.trash');
+
+Route::put('/role/{id}/restore', [RoleController::class, 'restore'])
+    ->name('role.restore');
+
+Route::put('/role/restore-all', [RoleController::class, 'restoreAll'])
+    ->name('role.restoreAll');
+
+Route::post('/role/{role}/toggle-status', [RoleController::class, 'toggleStatus'])
+    ->name('role.toggleStatus');
 Route::resource('role', RoleController::class);
 
 Route::get(

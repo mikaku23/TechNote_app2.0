@@ -31,7 +31,13 @@
             @csrf
             @method('PUT')
 
-            <button class="btn-primary">
+            <button
+                class="btn-primary"
+                data-tn-confirm
+                data-tn-type="success"
+                data-tn-title="Restore all software?"
+                data-tn-message="All software in the recycle bin will be restored."
+                data-tn-proceed-text="Restore All">
 
                 <i data-lucide="rotate-ccw"></i>
                 Restore All
@@ -83,7 +89,13 @@
                     @csrf
                     @method('PUT')
 
-                    <button class="btn-primary">
+                    <button
+                        class="btn-primary"
+                        data-tn-confirm
+                        data-tn-type="success"
+                        data-tn-title="Restore this software?"
+                        data-tn-message="The deleted software will be returned to the active list."
+                        data-tn-proceed-text="Restore">
 
                         <i data-lucide="rotate-ccw"></i>
                         Restore

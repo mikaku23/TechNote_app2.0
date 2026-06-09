@@ -10,7 +10,7 @@
                 </h2>
 
                 <p class="tn-modal-subtitle">
-                    Deleted users can be restored.
+                    Deleted roles can be restored.
                 </p>
             </div>
 
@@ -25,7 +25,7 @@
         </div>
 
         <form
-            action="{{ route('user.restoreAll') }}"
+            action="{{ route('role.restoreAll') }}"
             method="POST">
 
             @csrf
@@ -35,8 +35,8 @@
                 class="btn-primary"
                 data-tn-confirm
                 data-tn-type="success"
-                data-tn-title="Restore all users?"
-                data-tn-message="All users in the recycle bin will be restored."
+                data-tn-title="Restore all role?"
+                data-tn-message="All role in the recycle bin will be restored."
                 data-tn-proceed-text="Restore All">
 
                 <i data-lucide="rotate-ccw"></i>
@@ -53,7 +53,7 @@
                 gap:12px;
             ">
 
-            @forelse($users as $user)
+            @forelse($roles as $role)
 
             <div
                 class="glass"
@@ -68,7 +68,7 @@
                 <div>
 
                     <strong>
-                        {{ $user->name }}
+                        {{ $role->name }}
                     </strong>
 
                     <br>
@@ -76,14 +76,14 @@
                     <small
                         style="color:var(--text-light)">
 
-                        {{ $user->username }}
+                        {{ $role->developer ?? '-' }}
 
                     </small>
 
                 </div>
 
                 <form
-                    action="{{ route('user.restore', $user->id) }}"
+                    action="{{ route('role.restore',$role->id) }}"
                     method="POST">
 
                     @csrf
@@ -93,8 +93,8 @@
                         class="btn-primary"
                         data-tn-confirm
                         data-tn-type="success"
-                        data-tn-title="Restore this user?"
-                        data-tn-message="The deleted user will be returned to the active list."
+                        data-tn-title="Restore this role?"
+                        data-tn-message="The deleted role will be returned to the active list."
                         data-tn-proceed-text="Restore">
 
                         <i data-lucide="rotate-ccw"></i>

@@ -159,7 +159,15 @@
                     Cancel
                 </button>
 
-                <button type="submit" class="btn-primary">
+                <button
+                    type="submit"
+                    class="btn-primary"
+                    data-tn-confirm
+                    data-tn-type="warning"
+                    data-tn-title="Update this user?"
+                    data-tn-message="Please make sure all changes are correct before updating."
+                    data-tn-proceed-text="Update">
+
                     <i data-lucide="save"></i>
                     Update User
                 </button>

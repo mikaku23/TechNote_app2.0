@@ -38,11 +38,9 @@
 
                 <div class="tn-modal-group">
                     <label>Status</label>
-                    <input
-                        type="text"
-                        class="tn-modal-control"
-                        value="Ready"
-                        readonly>
+                    <div class="tn-modal-control" style="padding-top:0.8rem; color: var(--text-light);">
+                        Active by default
+                    </div>
                 </div>
 
                 <div class="tn-modal-group tn-modal-full">

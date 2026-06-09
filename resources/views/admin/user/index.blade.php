@@ -72,15 +72,18 @@
 
             <form
                 action="{{ route('user.destroyAll') }}"
-                method="POST"
-                onsubmit="return confirm('Move all users to recycle bin?')">
+                method="POST">
 
                 @csrf
                 @method('DELETE')
 
                 <button
-                    type="submit"
-                    class="btn-secondary">
+                    class="btn-secondary"
+                    data-tn-confirm
+                    data-tn-type="danger"
+                    data-tn-title="Move all users to recycle bin?"
+                    data-tn-message="All active users will be moved to the recycle bin."
+                    data-tn-proceed-text="Delete All">
 
                     <i data-lucide="trash-2"></i>
                     Delete All
@@ -202,7 +205,12 @@
 
                             <button
                                 type="submit"
-                                class="btn-secondary">
+                                class="btn-secondary"
+                                data-tn-confirm
+                                data-tn-type="danger"
+                                data-tn-title="Move user to recycle bin?"
+                                data-tn-message="This user will be moved to the recycle bin. The account can still be restored later."
+                                data-tn-proceed-text="Move to Bin">
 
                                 <i data-lucide="trash-2"></i>
 

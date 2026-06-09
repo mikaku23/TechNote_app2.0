@@ -1,0 +1,110 @@
+/* =========================
+   TN CONFIRM MODAL
+========================= */
+
+.tn-confirm-overlay{
+    position:fixed;
+    inset:0;
+    z-index:3000;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    padding:20px;
+
+    background:rgba(15, 23, 42, .28);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+
+    transition:opacity .25s ease, visibility .25s ease;
+}
+
+.tn-confirm-overlay.show{
+    opacity:1;
+    visibility:visible;
+    pointer-events:auto;
+}
+
+.tn-confirm-card{
+    width:min(520px, 95vw);
+    padding:24px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+
+    transform:scale(.96) translateY(10px);
+    transition:transform .25s ease;
+}
+
+.tn-confirm-overlay.show .tn-confirm-card{
+    transform:scale(1) translateY(0);
+}
+
+.tn-confirm-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+}
+
+.tn-confirm-icon-wrap{
+    width:52px;
+    height:52px;
+    border-radius:18px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.18);
+}
+
+.tn-confirm-icon-wrap i{
+    width:24px;
+    height:24px;
+}
+
+.tn-confirm-body{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.tn-confirm-title{
+    font-size:24px;
+    line-height:1.2;
+}
+
+.tn-confirm-message{
+    color:var(--text-light);
+    line-height:1.6;
+}
+
+.tn-confirm-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+    flex-wrap:wrap;
+}
+
+.tn-confirm-type-warning .tn-confirm-icon-wrap{
+    background:rgba(255,159,10,.16);
+}
+
+.tn-confirm-type-danger .tn-confirm-icon-wrap{
+    background:rgba(255,69,58,.16);
+}
+
+.tn-confirm-type-success .tn-confirm-icon-wrap{
+    background:rgba(52,199,89,.16);
+}
+
+body.overflow-hidden{
+    overflow:hidden;
+}

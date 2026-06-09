@@ -10,8 +10,22 @@
         <p>Manage system roles and permissions.</p>
     </div>
 
-    @if($roles->total() < 3)
-        <button
+    @if($roles->total() >= 3)
+    <button
+        type="button"
+        class="btn-primary"
+        data-tn-blocked
+        data-tn-type="warning"
+        data-tn-title="Role limit reached"
+        data-tn-message="Maximum of 3 roles allowed. Remove an existing role to add a new one."
+        data-tn-only-cancel="true">
+
+        <i data-lucide="plus"></i>
+        <span>Add Role</span>
+
+    </button>
+    @else
+    <button
         type="button"
         class="btn-primary open-modal"
         data-url="{{ route('role.create') }}">
@@ -19,35 +33,10 @@
         <i data-lucide="plus"></i>
         <span>Add Role</span>
 
-        </button>
-        @endif
+    </button>
+    @endif
 
 </div>
-
-@if (session('success'))
-<div class="tn-alert tn-alert-success">
-    <strong>Success!</strong>
-    <p>{{ session('success') }}</p>
-</div>
-@endif
-
-@if (session('edit'))
-<div class="tn-alert tn-alert-edit">
-    <strong>Updated!</strong>
-    <p>{{ session('edit') }}</p>
-</div>
-@endif
-
-@if ($errors->any())
-<div class="tn-alert tn-alert-error">
-    <strong>Oops! Please correct the following errors:</strong>
-    <ul>
-        @foreach ($errors->all() as $error)
-        <li>{{ $error }}</li>
-        @endforeach
-    </ul>
-</div>
-@endif
 
 <div class="glass table-card motion-card">
 
@@ -61,10 +50,22 @@
                 placeholder="Search role...">
         </div>
 
-        <span style="color:var(--text-light)">
-            Total: {{ $roles->total() }} Roles
-        </span>
+        <div style="display:flex;align-items:center;gap:10px;">
 
+            <button
+                type="button"
+                class="btn-secondary open-modal"
+                data-url="{{ route('role.trash') }}">
+
+                <i data-lucide="archive-restore"></i>
+
+            </button>
+
+            <span style="color:var(--text-light)">
+                Total: {{ $roles->total() }} Roles
+            </span>
+
+        </div>
     </div>
 
     <table>
@@ -73,8 +74,9 @@
             <tr>
                 <th>Role</th>
                 <th>Description</th>
+                <th>Status</th>
                 <th>Created</th>
-                <th width="170">Action</th>
+                <th width="220">Action</th>
             </tr>
         </thead>
 
@@ -85,37 +87,27 @@
             <tr>
 
                 <td>
-
-                    <div
-                        style="
-                            display:flex;
-                            align-items:center;
-                            gap:12px;
-                        ">
-
+                    <div style="display:flex;align-items:center;gap:12px;">
                         <div
                             class="glass"
-                            style="
-                                width:42px;
-                                height:42px;
-                                border-radius:14px;
-                                display:flex;
-                                align-items:center;
-                                justify-content:center;
-                            ">
-
+                            style="width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;">
                             <i data-lucide="shield"></i>
-
                         </div>
 
                         <strong>{{ $role->name }}</strong>
-
                     </div>
-
                 </td>
 
                 <td>
                     {{ $role->description ?? '-' }}
+                </td>
+
+                <td>
+                    @if($role->is_active)
+                    <span class="badge success">Active</span>
+                    @else
+                    <span class="badge danger">Inactive</span>
+                    @endif
                 </td>
 
                 <td>
@@ -135,9 +127,48 @@
 
                         </button>
 
+                        <form
+                            action="{{ route('role.toggleStatus', $role->id) }}"
+                            method="POST">
 
+                            @csrf
 
+                            <button
+                                type="submit"
+                                class="btn-secondary"
+                                data-tn-confirm
+                                data-tn-type="warning"
+                                data-tn-title="{{ $role->is_active ? 'Deactivate this role?' : 'Activate this role?' }}"
+                                data-tn-message="{{ $role->is_active ? 'Users with this role will be blocked from logging in.' : 'Users with this role will be allowed to log in again.' }}"
+                                data-tn-proceed-text="{{ $role->is_active ? 'Deactivate' : 'Activate' }}">
 
+                                <i data-lucide="{{ $role->is_active ? 'toggle-left' : 'toggle-right' }}"></i>
+
+                            </button>
+
+                        </form>
+
+                        <form
+                            action="{{ route('role.destroy',$role->id) }}"
+                            method="POST">
+
+                            @csrf
+                            @method('DELETE')
+
+                            <button
+                                type="submit"
+                                class="btn-secondary"
+                                data-tn-confirm
+                                data-tn-type="danger"
+                                data-tn-title="Move role to recycle bin?"
+                                data-tn-message="This role will be moved to the recycle bin. Related users will remain, but login depends on role status and availability."
+                                data-tn-proceed-text="Move to Bin">
+
+                                <i data-lucide="trash-2"></i>
+
+                            </button>
+
+                        </form>
 
                     </div>
 
@@ -148,11 +179,9 @@
             @empty
 
             <tr>
-
-                <td colspan="4" style="text-align:center;padding:40px">
+                <td colspan="5" style="text-align:center;padding:40px">
                     No role available.
                 </td>
-
             </tr>
 
             @endforelse

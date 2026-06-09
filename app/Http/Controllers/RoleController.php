@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
 {
@@ -14,7 +13,7 @@ class RoleController extends Controller
         $roles = Role::latest()->paginate(10);
 
         return view('admin.role.index', [
-            'menu' => 'role',
+            'menu'  => 'role',
             'title' => 'Role Management',
             'roles' => $roles,
         ]);
@@ -28,10 +27,11 @@ class RoleController extends Controller
     public function store(Request $request)
     {
         $messages = [
-            'name.required'        => 'Please enter a role name.',
-            'name.max'             => 'Role name may not be greater than :max characters.',
-            'name.unique'          => 'This role name is already in use.',
-            'description.nullable' => 'Description is optional.',
+            'name.required'     => 'Please enter a role name.',
+            'name.max'          => 'Role name may not be greater than :max characters.',
+            'name.unique'       => 'This role name is already in use.',
+            'description.string' => 'Description must be a valid text.',
+            'is_active.boolean' => 'The active status must be true or false.',
         ];
 
         $validator = Validator::make($request->all(), [
@@ -49,6 +49,7 @@ class RoleController extends Controller
         Role::create([
             'name'        => $request->name,
             'description' => $request->description,
+            'is_active'   => true,
         ]);
 
         return redirect()
@@ -59,39 +60,22 @@ class RoleController extends Controller
     public function show(Role $role)
     {
         return view('admin.role.show', [
-            'role' => $role
+            'role' => $role,
         ]);
     }
 
-    public function edit(Role $role)
+    public function toggleStatus(Role $role)
     {
-        return view('admin.role.edit', [
-            'role' => $role
-        ]);
-    }
-
-    public function update(Request $request, Role $role)
-    {
-        $messages = [
-            'name.required'        => 'Please enter a role name.',
-            'name.max'             => 'Role name may not be greater than :max characters.',
-            'name.unique'          => 'This role name is already in use.',
-            'description.nullable' => 'Description is optional.',
-        ];
-
-        $validated = $request->validate([
-            'name'        => ['required', 'max:255', Rule::unique('roles', 'name')->ignore($role->id)],
-            'description' => 'nullable|string',
-        ], $messages);
-
         $role->update([
-            'name'        => $validated['name'],
-            'description' => $validated['description'],
+            'is_active' => ! $role->is_active,
         ]);
 
-        return redirect()
-            ->route('role.index')
-            ->with('edit', 'Role updated successfully.');
+        return back()->with(
+            'success',
+            $role->is_active
+                ? 'Role activated successfully.'
+                : 'Role deactivated successfully.'
+        );
     }
 
     public function destroy(Role $role)
@@ -101,5 +85,30 @@ class RoleController extends Controller
         return redirect()
             ->route('role.index')
             ->with('success', 'Role deleted successfully.');
+    }
+
+    public function trash()
+    {
+        $roles = Role::onlyTrashed()
+            ->latest()
+            ->get();
+
+        return view('admin.role.trash', compact('roles'));
+    }
+
+    public function restore($id)
+    {
+        Role::onlyTrashed()
+            ->findOrFail($id)
+            ->restore();
+
+        return back()->with('success', 'Role restored successfully.');
+    }
+
+    public function restoreAll()
+    {
+        Role::onlyTrashed()->restore();
+
+        return back()->with('success', 'All roles restored successfully.');
     }
 }

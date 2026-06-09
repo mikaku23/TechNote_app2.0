@@ -79,8 +79,12 @@
                 @method('DELETE')
 
                 <button
-                    type="submit"
-                    class="btn-secondary">
+                    class="btn-secondary"
+                    data-tn-confirm
+                    data-tn-type="danger"
+                    data-tn-title="Move all softwares to recycle bin?"
+                    data-tn-message="All active softwares will be moved to the recycle bin."
+                    data-tn-proceed-text="Delete All">
 
                     <i data-lucide="trash-2"></i>
                     Delete All
@@ -201,7 +205,12 @@
 
                             <button
                                 type="submit"
-                                class="btn-secondary">
+                                class="btn-secondary"
+                                data-tn-confirm
+                                data-tn-type="danger"
+                                data-tn-title="Move software to recycle bin?"
+                                data-tn-message="This software will be moved to the recycle bin. The installation can still be restored later."
+                                data-tn-proceed-text="Move to Bin">
 
                                 <i data-lucide="trash-2"></i>
 

@@ -173,7 +173,12 @@
 
                             <button
                                 type="submit"
-                                class="btn-secondary">
+                                class="btn-secondary"
+                                data-tn-confirm
+                                data-tn-type="danger"
+                                data-tn-title="Move trusted website to recycle bin?"
+                                data-tn-message="This trusted website will be moved to the recycle bin. The installation can still be restored later."
+                                data-tn-proceed-text="Move to Bin">
 
                                 <i data-lucide="trash-2"></i>
 
