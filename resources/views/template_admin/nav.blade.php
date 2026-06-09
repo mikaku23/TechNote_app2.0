@@ -79,7 +79,7 @@
             <div class="profile" id="profileMenuButton">
 
                 <img
-                    src="https://i.pravatar.cc/100"
+                    src="#"
                     alt="">
 
                 <div>

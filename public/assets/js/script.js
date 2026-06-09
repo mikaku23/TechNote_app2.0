@@ -16,6 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeSearch();
     initializeSidebarDropdowns();
     initializeActiveMenu();
+    initializeSoftwareSearch();
+    initializeModalLoader();
+    initializeModalClose();
 });
 
 /* ==========================
@@ -136,9 +139,9 @@ function initializeCounters() {
     const counters = document.querySelectorAll(".stat-card h2");
 
     counters.forEach((counter) => {
-        const target = parseInt(counter.textContent.replace(/,/g, ""));
+        const target = parseInt(counter.textContent.replace(/,/g, ""), 10);
 
-        if (isNaN(target)) return;
+        if (Number.isNaN(target)) return;
 
         animateCounter(counter, target);
     });
@@ -212,11 +215,17 @@ function initializePageAnimation() {
    CARD MOTION
 ========================== */
 
+const cardRafMap = new WeakMap();
+
 function initializeCards() {
+    if (document.body.classList.contains("admin-panel")) {
+        return;
+    }
+
     const cards = document.querySelectorAll(".motion-card");
 
     cards.forEach((card) => {
-        card.addEventListener("mousemove", handleCardMove);
+        card.addEventListener("mousemove", handleCardMove, { passive: true });
         card.addEventListener("mouseleave", resetCard);
     });
 }
@@ -227,27 +236,35 @@ function handleCardMove(event) {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    card.classList.add("liquid");
-    card.style.setProperty("--mouse-x", `${x}px`);
-    card.style.setProperty("--mouse-y", `${y}px`);
+    const prevFrame = cardRafMap.get(card);
+    if (prevFrame) cancelAnimationFrame(prevFrame);
 
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -4;
-    const rotateY = ((x - centerX) / centerX) * 4;
+    const frame = requestAnimationFrame(() => {
+        card.classList.add("liquid");
+        card.style.setProperty("--mouse-x", `${x}px`);
+        card.style.setProperty("--mouse-y", `${y}px`);
 
-    card.style.transform = `
-        perspective(1000px)
-        rotateX(${rotateX}deg)
-        rotateY(${rotateY}deg)
-        translateY(-4px)
-    `;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * -4;
+        const rotateY = ((x - centerX) / centerX) * 4;
+
+        card.style.transform = `
+            perspective(1000px)
+            rotateX(${rotateX}deg)
+            rotateY(${rotateY}deg)
+            translateY(-4px)
+        `;
+    });
+
+    cardRafMap.set(card, frame);
 }
 
 function resetCard(event) {
-    event.currentTarget.classList.remove("liquid");
+    const card = event.currentTarget;
 
-    event.currentTarget.style.transform = `
+    card.classList.remove("liquid");
+    card.style.transform = `
         perspective(1000px)
         rotateX(0deg)
         rotateY(0deg)
@@ -264,15 +281,19 @@ function initializeSearch() {
 
     if (!searchInput) return;
 
-    searchInput.addEventListener("keyup", function () {
+    const rows = Array.from(document.querySelectorAll("tbody tr"));
+    let searchFrame = 0;
+
+    searchInput.addEventListener("input", function () {
         const keyword = this.value.toLowerCase();
 
-        const rows = document.querySelectorAll("tbody tr");
+        cancelAnimationFrame(searchFrame);
 
-        rows.forEach((row) => {
-            const text = row.textContent.toLowerCase();
-
-            row.style.display = text.includes(keyword) ? "" : "none";
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(keyword) ? "" : "none";
+            });
         });
     });
 }
@@ -285,7 +306,6 @@ function showToast(message, type = "success") {
     const toast = document.createElement("div");
 
     toast.className = `toast ${type}`;
-
     toast.innerHTML = message;
 
     document.body.appendChild(toast);
@@ -362,90 +382,75 @@ function setActiveChild(item) {
 
 const sidebarPopupTimers = new Map();
 
+function clearSidebarPopupTimer(group) {
+    const timer = sidebarPopupTimers.get(group);
+
+    if (timer) {
+        clearTimeout(timer);
+        sidebarPopupTimers.delete(group);
+    }
+}
+
+function closeSidebarPopupGroup(group) {
+    clearSidebarPopupTimer(group);
+
+    group.classList.remove("popup-open");
+
+    const button = group.querySelector(".nav-dropdown");
+    if (button) {
+        button.setAttribute("aria-expanded", "false");
+    }
+}
+
 function closeAllSidebarDropdowns() {
     document.querySelectorAll(".nav-group").forEach((group) => {
         group.classList.remove("open");
         group.classList.remove("popup-open");
+        clearSidebarPopupTimer(group);
 
         const button = group.querySelector(".nav-dropdown");
         if (button) {
             button.setAttribute("aria-expanded", "false");
-        }
-
-        const timer = sidebarPopupTimers.get(group);
-        if (timer) {
-            clearTimeout(timer);
-            sidebarPopupTimers.delete(group);
         }
     });
 }
 
 function initializeSidebarDropdowns() {
-    const dropdowns = document.querySelectorAll(".nav-dropdown");
-    const dropdownItems = document.querySelectorAll(".dropdown-item");
+    const sidebarNav = document.querySelector(".sidebar-nav");
     const main = document.querySelector(".main");
-    const popupTimers = new Map();
 
-    function isCollapsedMode() {
-        return document.body.classList.contains("sidebar-collapsed");
-    }
+    if (!sidebarNav) return;
 
-    function clearPopupTimer(group) {
-        const timer = popupTimers.get(group);
+    const isCollapsedMode = () =>
+        document.body.classList.contains("sidebar-collapsed");
 
-        if (timer) {
-            clearTimeout(timer);
-            popupTimers.delete(group);
-        }
-    }
-
-    function closePopupGroup(group) {
-        clearPopupTimer(group);
-
-        group.classList.remove("popup-open");
-
-        const button = group.querySelector(".nav-dropdown");
-
-        if (button) {
-            button.setAttribute("aria-expanded", "false");
-        }
-    }
-
-    function closeAllPopupGroups(exceptGroup = null) {
-        document.querySelectorAll(".nav-group").forEach((group) => {
-            if (group !== exceptGroup) {
-                closePopupGroup(group);
-            }
-        });
-    }
-
-    function openPopupGroup(group) {
+    const openSidebarPopupGroup = (group) => {
         if (!isCollapsedMode()) return;
 
-        closeAllPopupGroups(group);
-
+        closeAllSidebarDropdowns();
         group.classList.add("popup-open");
 
         const button = group.querySelector(".nav-dropdown");
-
         if (button) {
             button.setAttribute("aria-expanded", "true");
         }
-    }
+    };
 
-    function schedulePopupClose(group, delay = 5000) {
-        clearPopupTimer(group);
+    const schedulePopupClose = (group, delay = 5000) => {
+        clearSidebarPopupTimer(group);
 
-        popupTimers.set(
-            group,
-            setTimeout(() => {
-                closePopupGroup(group);
-            }, delay),
-        );
-    }
+        const timer = setTimeout(() => {
+            closeSidebarPopupGroup(group);
+        }, delay);
 
-    dropdowns.forEach((dropdown) => {
-        dropdown.addEventListener("click", (e) => {
+        sidebarPopupTimers.set(group, timer);
+    };
+
+    sidebarNav.addEventListener("click", (e) => {
+        const dropdown = e.target.closest(".nav-dropdown");
+        const item = e.target.closest(".dropdown-item");
+
+        if (dropdown) {
             const group = dropdown.closest(".nav-group");
 
             if (!group) return;
@@ -458,14 +463,13 @@ function initializeSidebarDropdowns() {
             if (collapsed) {
                 const isPopupOpen = group.classList.contains("popup-open");
 
-                closeAllPopupGroups(group);
+                closeAllSidebarDropdowns();
 
                 if (!isPopupOpen) {
-                    openPopupGroup(group);
+                    openSidebarPopupGroup(group);
                 }
 
                 dropdown.setAttribute("aria-expanded", String(!isPopupOpen));
-
                 return;
             }
 
@@ -476,15 +480,23 @@ function initializeSidebarDropdowns() {
             });
 
             group.classList.toggle("open");
-
             setActiveGroup(group);
-
             dropdown.setAttribute("aria-expanded", String(!isOpen));
-        });
-    });
+            return;
+        }
 
-    dropdownItems.forEach((item) => {
-        item.addEventListener("click", (e) => {
+        if (item) {
+            const href = item.getAttribute("href");
+
+            if (
+                href &&
+                href !== "#" &&
+                href !== "" &&
+                !href.startsWith("javascript")
+            ) {
+                return;
+            }
+
             e.preventDefault();
 
             clearSidebarActive();
@@ -492,7 +504,6 @@ function initializeSidebarDropdowns() {
             item.classList.add("active");
 
             const parentGroup = item.closest(".nav-group");
-
             if (!parentGroup) return;
 
             parentGroup.classList.add("active");
@@ -503,33 +514,13 @@ function initializeSidebarDropdowns() {
             } else {
                 parentGroup.classList.add("open");
             }
-        });
-    });
-
-    if (main) {
-        main.addEventListener("mouseenter", () => {
-            if (isCollapsedMode()) {
-                closeAllPopupGroups();
-            }
-        });
-    }
-
-    document.addEventListener("click", (e) => {
-        if (isCollapsedMode() && !e.target.closest(".sidebar")) {
-            closeAllPopupGroups();
-        }
-    });
-
-    window.addEventListener("resize", () => {
-        if (!isCollapsedMode()) {
-            closeAllPopupGroups();
         }
     });
 
     document.querySelectorAll(".nav-group").forEach((group) => {
         group.addEventListener("mouseenter", () => {
             if (isCollapsedMode() && group.classList.contains("popup-open")) {
-                clearPopupTimer(group);
+                clearSidebarPopupTimer(group);
             }
         });
 
@@ -538,5 +529,98 @@ function initializeSidebarDropdowns() {
                 schedulePopupClose(group, 250);
             }
         });
+    });
+
+    if (main) {
+        main.addEventListener("mouseenter", () => {
+            if (isCollapsedMode()) {
+                closeAllSidebarDropdowns();
+            }
+        });
+    }
+
+    document.addEventListener("click", (e) => {
+        if (isCollapsedMode() && !e.target.closest(".sidebar")) {
+            closeAllSidebarDropdowns();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (!isCollapsedMode()) {
+            closeAllSidebarDropdowns();
+        }
+    });
+}
+
+function initializeSoftwareSearch() {
+    const input = document.getElementById("softwareSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll("tbody tr"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+
+/* ==========================
+   MODAL LOADER
+========================== */
+
+function initializeModalLoader() {
+    document.addEventListener("click", async function (e) {
+        const button = e.target.closest(".open-modal");
+
+        if (!button) return;
+
+        const url = button.dataset.url;
+
+        if (!url) return;
+
+        try {
+            const response = await fetch(url);
+            const html = await response.text();
+
+            const container = document.getElementById("modalContainer");
+            if (!container) return;
+
+            container.innerHTML = html;
+
+            if (typeof lucide !== "undefined") {
+                lucide.createIcons();
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    });
+}
+
+function initializeModalClose() {
+    document.addEventListener("click", function (e) {
+        const container = document.getElementById("modalContainer");
+        if (!container) return;
+
+        if (e.target.classList.contains("modal-overlay")) {
+            container.innerHTML = "";
+        }
+
+        const closeBtn = e.target.closest(".close-modal");
+        if (closeBtn) {
+            container.innerHTML = "";
+        }
     });
 }

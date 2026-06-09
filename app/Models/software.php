@@ -6,7 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class software extends Model
 {
-    protected $fillable = [];
+    protected $fillable = [
+        'name',
+        'developer',
+        'version',
+        'description',
+    ];
 
     public function penginstalans()
     {

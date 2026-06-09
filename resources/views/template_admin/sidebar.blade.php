@@ -168,7 +168,7 @@
 
             <!-- MASTER DATA -->
             <div class="dropdown-menu">
-                <a href="#" class="dropdown-item" data-parent="master-data">
+                <a href="{{ route('software.index') }}" class="dropdown-item" data-parent="master-data">
                     <i data-lucide="package"></i>
                     <span>Software</span>
                 </a>
