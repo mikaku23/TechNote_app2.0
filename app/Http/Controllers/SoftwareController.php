@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Software;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class SoftwareController extends Controller
 {
@@ -25,12 +26,27 @@ class SoftwareController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $messages = [
+            'name.required'        => 'Please enter the software name.',
+            'name.max'             => 'Software name may not be greater than :max characters.',
+            'developer.max'        => 'Developer name may not be greater than :max characters.',
+            'version.max'          => 'Version may not be greater than :max characters.',
+            'description.string'   => 'Description must be text.',
+        ];
+
+        $validator = Validator::make($request->all(), [
             'name'        => 'required|string|max:255',
             'developer'   => 'nullable|string|max:255',
             'version'     => 'nullable|string|max:255',
             'description' => 'nullable|string',
-        ]);
+        ], $messages);
+
+        if ($validator->fails()) {
+            return redirect()
+                ->route('software.index')
+                ->withErrors($validator)
+                ->withInput();
+        }
 
         Software::create([
             'name'        => $request->name,
@@ -41,10 +57,7 @@ class SoftwareController extends Controller
 
         return redirect()
             ->route('software.index')
-            ->with(
-                'success',
-                'Software created successfully.'
-            );
+            ->with('success', 'Software created successfully.');
     }
 
     public function show(Software $software)
@@ -65,26 +78,31 @@ class SoftwareController extends Controller
 
     public function update(Request $request, Software $software)
     {
-        $request->validate([
+        $messages = [
+            'name.required'        => 'Please enter the software name.',
+            'name.max'             => 'Software name may not be greater than :max characters.',
+            'developer.max'        => 'Developer name may not be greater than :max characters.',
+            'version.max'          => 'Version may not be greater than :max characters.',
+            'description.string'   => 'Description must be text.',
+        ];
+
+        $validated = $request->validate([
             'name'        => 'required|string|max:255',
             'developer'   => 'nullable|string|max:255',
             'version'     => 'nullable|string|max:255',
             'description' => 'nullable|string',
-        ]);
+        ], $messages);
 
         $software->update([
-            'name'        => $request->name,
-            'developer'   => $request->developer,
-            'version'     => $request->version,
-            'description' => $request->description,
+            'name'        => $validated['name'],
+            'developer'   => $validated['developer'],
+            'version'     => $validated['version'],
+            'description' => $validated['description'],
         ]);
 
         return redirect()
             ->route('software.index')
-            ->with(
-                'success',
-                'Software updated successfully.'
-            );
+            ->with('edit', 'Software updated successfully.');
     }
 
     public function destroy(Software $software)
@@ -96,6 +114,49 @@ class SoftwareController extends Controller
             ->with(
                 'success',
                 'Software deleted successfully.'
+            );
+    }
+    public function trash()
+    {
+        $softwares = Software::onlyTrashed()
+            ->latest()
+            ->get();
+
+        return view(
+            'admin.software.trash',
+            compact('softwares')
+        );
+    }
+    public function restore($id)
+    {
+        Software::onlyTrashed()
+            ->findOrFail($id)
+            ->restore();
+
+        return back()->with(
+            'success',
+            'Software restored successfully.'
+        );
+    }
+    public function restoreAll()
+    {
+        Software::onlyTrashed()
+            ->restore();
+
+        return back()->with(
+            'success',
+            'All software restored successfully.'
+        );
+    }
+    public function destroyAll()
+    {
+        Software::query()->delete();
+
+        return redirect()
+            ->route('software.index')
+            ->with(
+                'success',
+                'All Softwares deleted successfully.'
             );
     }
 }

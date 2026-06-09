@@ -12,7 +12,7 @@
     <nav class="sidebar-nav">
 
         <!-- DASHBOARD -->
-        <a href="#" class="nav-item active" data-nav="dashboard">
+        <a href="#" class="nav-item " data-nav="dashboard">
             <i data-lucide="layout-dashboard"></i>
             <span class="nav-label">Dashboard</span>
         </a>
@@ -54,32 +54,43 @@
 
         </div>
 
-        <!-- USERS -->
-        <div class="nav-group" data-group="users">
+            <!-- USERS -->
+            <div class="nav-group {{ in_array($menu, ['user', 'role']) ? 'active open' : '' }}">
 
-            <button class="nav-dropdown" type="button" aria-expanded="false">
-                <div class="nav-dropdown-left">
-                    <i data-lucide="users"></i>
-                    <span class="nav-label">Users</span>
+                <button class="nav-dropdown">
+
+                    <div class="nav-dropdown-left">
+                        <i data-lucide="users"></i>
+                        <span class="nav-label">Users</span>
+                    </div>
+
+                    <i data-lucide="chevron-down" class="dropdown-arrow"></i>
+
+                </button>
+
+                <div class="dropdown-menu">
+
+                    <a href="{{ route('user.index') }}"
+                        class="dropdown-item {{ $menu == 'user' ? 'active' : '' }}"
+                        data-parent="users">
+
+                        <i data-lucide="users-round"></i>
+                        <span>User Management</span>
+
+                    </a>
+
+                    <a href="{{ route('role.index') }}"
+                        class="dropdown-item {{ $menu == 'role' ? 'active' : '' }}"
+                        data-parent="users">
+
+                        <i data-lucide="shield-check"></i>
+                        <span>Roles & Permissions</span>
+
+                    </a>
+
                 </div>
 
-                <i class="dropdown-arrow" data-lucide="chevron-down"></i>
-            </button>
-
-            <!-- USERS -->
-            <div class="dropdown-menu">
-                <a href="#" class="dropdown-item" data-parent="users">
-                    <i data-lucide="users-round"></i>
-                    <span>User Management</span>
-                </a>
-
-                <a href="#" class="dropdown-item" data-parent="users">
-                    <i data-lucide="shield-check"></i>
-                    <span>Roles & Permissions</span>
-                </a>
             </div>
-
-        </div>
 
         <!-- AI -->
         <div class="nav-group" data-group="ai">
@@ -155,28 +166,42 @@
         </div>
 
         <!-- MASTER DATA -->
-        <div class="nav-group" data-group="master-data">
+        <div class="nav-group {{ in_array($menu, ['software', 'trusted']) ? 'active open' : '' }}"
+            data-group="master-data">
 
-            <button class="nav-dropdown" type="button" aria-expanded="false">
+            <button class="nav-dropdown"
+                type="button"
+                aria-expanded="{{ in_array($menu, ['software', 'trusted']) ? 'true' : 'false' }}">
+
                 <div class="nav-dropdown-left">
                     <i data-lucide="database"></i>
                     <span class="nav-label">Master Data</span>
                 </div>
 
                 <i class="dropdown-arrow" data-lucide="chevron-down"></i>
+
             </button>
 
-            <!-- MASTER DATA -->
             <div class="dropdown-menu">
-                <a href="{{ route('software.index') }}" class="dropdown-item" data-parent="master-data">
+
+                <a href="{{ route('software.index') }}"
+                    class="dropdown-item {{ $menu == 'software' ? 'active' : '' }}"
+                    data-parent="master-data">
+
                     <i data-lucide="package"></i>
                     <span>Software</span>
+
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="master-data">
+                <a href="{{ route('trusted.index') }}"
+                    class="dropdown-item {{ $menu == 'trusted' ? 'active' : '' }}"
+                    data-parent="master-data">
+
                     <i data-lucide="globe"></i>
                     <span>Trusted Websites</span>
+
                 </a>
+
             </div>
 
         </div>

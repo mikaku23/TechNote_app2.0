@@ -1,21 +1,21 @@
 @extends('template_admin.layout')
-@section('title', 'Software Library')
+@section('title', 'User Management')
 @section('content')
 
 <div class="page-header">
 
     <div>
-        <h1>Software Library</h1>
-        <p>Manage software available for installation services.</p>
+        <h1>User Management</h1>
+        <p>Manage system users, access roles, and account information.</p>
     </div>
 
     <button
         type="button"
         class="btn-primary open-modal"
-        data-url="{{ route('software.create') }}">
+        data-url="{{ route('user.create') }}">
 
         <i data-lucide="plus"></i>
-        <span>Add Software</span>
+        <span>Add User</span>
 
     </button>
 
@@ -54,8 +54,8 @@
             <i data-lucide="search"></i>
             <input
                 type="text"
-                id="softwareSearch"
-                placeholder="Search software...">
+                id="userSearch"
+                placeholder="Search user...">
         </div>
 
         <div class="table-footer-actions">
@@ -63,7 +63,7 @@
             <button
                 type="button"
                 class="btn-secondary open-modal"
-                data-url="{{ route('software.trash') }}">
+                data-url="{{ route('user.trash') }}">
 
                 <i data-lucide="archive-restore"></i>
                 Recycle Bin
@@ -71,9 +71,9 @@
             </button>
 
             <form
-                action="{{ route('software.destroyAll') }}"
+                action="{{ route('user.destroyAll') }}"
                 method="POST"
-                onsubmit="return confirm('Move all softwares to recycle bin?')">
+                onsubmit="return confirm('Move all users to recycle bin?')">
 
                 @csrf
                 @method('DELETE')
@@ -99,9 +99,10 @@
 
             <tr>
                 <th>Name</th>
-                <th>Developer</th>
-                <th>Version</th>
-                <th>Created</th>
+                <th>Role</th>
+                <th>Username</th>
+                <th>Identity</th>
+                <th>Contact</th>
                 <th width="170">Action</th>
             </tr>
 
@@ -109,47 +110,37 @@
 
         <tbody>
 
-            @forelse($softwares as $software)
+            @forelse($users as $user)
 
             <tr>
 
                 <td>
 
-                    <div
-                        style="
-                            display:flex;
-                            align-items:center;
-                            gap:12px;
-                        ">
+                    <div style="display:flex;align-items:center;gap:12px;">
 
                         <div
                             class="glass"
-                            style="
-                                width:42px;
-                                height:42px;
-                                border-radius:14px;
-                                display:flex;
-                                align-items:center;
-                                justify-content:center;
-                            ">
+                            style="width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
 
-                            <i data-lucide="package"></i>
+                            @if($user->avatar)
+                            <img
+                                src="{{ asset('storage/'.$user->avatar) }}"
+                                alt="{{ $user->name }}"
+                                style="width:100%;height:100%;object-fit:cover;">
+                            @else
+                            <i data-lucide="user"></i>
+                            @endif
 
                         </div>
 
                         <div>
 
-                            <strong>
-                                {{ $software->name }}
-                            </strong>
+                            <strong>{{ $user->name }}</strong>
 
                             <br>
 
-                            <small
-                                style="
-                                    color:var(--text-light);
-                                ">
-                                Software Installation
+                            <small style="color:var(--text-light);">
+                                {{ $user->email ?? 'No email' }}
                             </small>
 
                         </div>
@@ -159,15 +150,25 @@
                 </td>
 
                 <td>
-                    {{ $software->developer ?? '-' }}
+                    {{ $user->role->name ?? '-' }}
                 </td>
 
                 <td>
-                    {{ $software->version ?? '-' }}
+                    {{ $user->username }}
                 </td>
 
                 <td>
-                    {{ $software->created_at->format('d M Y') }}
+                    @if($user->nim)
+                    NIM: {{ $user->nim }}
+                    @elseif($user->nip)
+                    NIP: {{ $user->nip }}
+                    @else
+                    -
+                    @endif
+                </td>
+
+                <td>
+                    {{ $user->no_hp }}
                 </td>
 
                 <td>
@@ -177,7 +178,7 @@
                         <button
                             type="button"
                             class="btn-secondary open-modal"
-                            data-url="{{ route('software.show',$software->id) }}">
+                            data-url="{{ route('user.show', $user->id) }}">
 
                             <i data-lucide="eye"></i>
 
@@ -186,14 +187,14 @@
                         <button
                             type="button"
                             class="btn-secondary open-modal"
-                            data-url="{{ route('software.edit',$software->id) }}">
+                            data-url="{{ route('user.edit', $user->id) }}">
 
                             <i data-lucide="pencil"></i>
 
                         </button>
 
                         <form
-                            action="{{ route('software.destroy',$software->id) }}"
+                            action="{{ route('user.destroy', $user->id) }}"
                             method="POST">
 
                             @csrf
@@ -219,15 +220,8 @@
 
             <tr>
 
-                <td
-                    colspan="5"
-                    style="
-                        text-align:center;
-                        padding:40px;
-                    ">
-
-                    No software available.
-
+                <td colspan="6" style="text-align:center;padding:40px;">
+                    No user available.
                 </td>
 
             </tr>
@@ -241,9 +235,7 @@
 </div>
 
 <div class="pagination-wrapper">
-
-    {{ $softwares->links() }}
-
+    {{ $users->links() }}
 </div>
 
 <div id="modalContainer"></div>

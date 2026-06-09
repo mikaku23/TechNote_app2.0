@@ -15,10 +15,13 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeCards();
     initializeSearch();
     initializeSidebarDropdowns();
-    initializeActiveMenu();
     initializeSoftwareSearch();
+    initializeUserSearch();
+    initializeRoleSearch();
+    initializeTrustedWebsiteSearch();
     initializeModalLoader();
     initializeModalClose();
+    initializeSidebarState();
 });
 
 /* ==========================
@@ -323,25 +326,6 @@ function showToast(message, type = "success") {
     }, 3000);
 }
 
-/* ==========================
-   ACTIVE MENU
-========================== */
-
-function initializeActiveMenu() {
-    const navItems = document.querySelectorAll(".nav-item");
-
-    navItems.forEach((item) => {
-        item.addEventListener("click", function (e) {
-            e.preventDefault();
-
-            closeAllSidebarDropdowns();
-            clearSidebarActive();
-
-            this.classList.add("active");
-        });
-    });
-}
-
 function clearSidebarActive() {
     document.querySelectorAll(".nav-item").forEach((item) => {
         item.classList.remove("active");
@@ -488,6 +472,8 @@ function initializeSidebarDropdowns() {
         if (item) {
             const href = item.getAttribute("href");
 
+            // jika menuju route Laravel,
+            // biarkan Blade yang menentukan active
             if (
                 href &&
                 href !== "#" &&
@@ -499,11 +485,8 @@ function initializeSidebarDropdowns() {
 
             e.preventDefault();
 
-            clearSidebarActive();
-
-            item.classList.add("active");
-
             const parentGroup = item.closest(".nav-group");
+
             if (!parentGroup) return;
 
             parentGroup.classList.add("active");
@@ -552,8 +535,99 @@ function initializeSidebarDropdowns() {
     });
 }
 
+function initializeSidebarState() {
+    document.querySelectorAll(".dropdown-item.active").forEach((item) => {
+        const group = item.closest(".nav-group");
+
+        if (!group) return;
+
+        group.classList.add("active");
+        group.classList.add("open");
+
+        const button = group.querySelector(".nav-dropdown");
+
+        if (button) {
+            button.setAttribute("aria-expanded", "true");
+        }
+    });
+}
+
 function initializeSoftwareSearch() {
     const input = document.getElementById("softwareSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll("tbody tr"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+
+function initializeUserSearch() {
+    const input = document.getElementById("userSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll("tbody tr"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+
+function initializeTrustedWebsiteSearch() {
+    const input = document.getElementById("trustedWebsiteSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll("tbody tr"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+function initializeRoleSearch() {
+    const input = document.getElementById("roleSearch");
 
     if (!input) return;
 

@@ -180,6 +180,13 @@
             }
 
         }
+
+        .table-footer-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 20px;
+        }
     </style>
     @yield('css')
 </head>
