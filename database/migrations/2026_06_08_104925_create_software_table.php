@@ -13,7 +13,18 @@ return new class extends Migration
     {
         Schema::create('software', function (Blueprint $table) {
             $table->id();
+
+            $table->string('name');
+
+            $table->string('developer')->nullable();
+
+            $table->string('version')->nullable();
+
+            $table->text('description')->nullable();
+
             $table->timestamps();
+
+            $table->softDeletes();
         });
     }
 
