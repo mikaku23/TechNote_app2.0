@@ -11,4 +11,8 @@ class system_setting extends Model
         'value',
         'description',
     ];
+
+    protected $casts = [
+        'value' => 'json',
+    ];
 }

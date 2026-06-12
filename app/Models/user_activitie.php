@@ -15,6 +15,11 @@ class user_activitie extends Model
         'new_data',
     ];
 
+    protected $casts = [
+        'old_data' => 'json',
+        'new_data' => 'json',
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);

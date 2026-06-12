@@ -22,6 +22,8 @@ return new class extends Migration
 
             $table->text('description')->nullable();
 
+            $table->unsignedInteger('estimated_minutes')->default(30);
+
             $table->timestamps();
 
             $table->softDeletes();

@@ -70,7 +70,15 @@
                     Cancel
                 </button>
 
-                <button type="submit" class="btn-primary">
+                <button
+                    type="submit"
+                    class="btn-primary"
+                    data-tn-confirm
+                    data-tn-type="success"
+                    data-tn-title="Save trusted website?"
+                    data-tn-message="The trusted website information will be saved and become available in the system."
+                    data-tn-proceed-text="Save">
+
                     <i data-lucide="save"></i>
                     Save Trusted Website
                 </button>

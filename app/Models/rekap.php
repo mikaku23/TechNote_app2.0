@@ -14,4 +14,8 @@ class rekap extends Model
         'failed_tickets',
         'pending_tickets',
     ];
+
+    protected $casts = [
+        'rekap_date' => 'date',
+    ];
 }

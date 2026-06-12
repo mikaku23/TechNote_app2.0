@@ -1,0 +1,10 @@
+@extends('errors.layout')
+
+@section('title', '404')
+@section('badge', 'Tidak Ditemukan')
+@section('code', '404')
+@section('headline', 'Halaman tidak ditemukan')
+@section('message', 'Alamat yang dibuka tidak tersedia, sudah dipindahkan, atau salah ketik. Periksa kembali tautan atau kembali ke beranda.')
+@section('icon', 'search-x')
+@section('status_text', 'URL tidak cocok dengan rute yang tersedia.')
+@section('note', 'Pastikan alamat tujuan benar sebelum membuka halaman.')

@@ -13,6 +13,10 @@ class ai_action_log extends Model
         'result',
     ];
 
+    protected $casts = [
+        'action_data' => 'json',
+    ];
+
     public function aiLog()
     {
         return $this->belongsTo(ai_log::class, 'ai_log_id');

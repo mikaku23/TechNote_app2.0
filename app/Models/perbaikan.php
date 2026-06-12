@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class perbaikan extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'ticket_id',
         'user_id',
@@ -19,7 +22,7 @@ class perbaikan extends Model
 
     public function ticket()
     {
-        return $this->belongsTo(ticket::class);
+        return $this->belongsTo(ticket::class)->withTrashed();
     }
 
     public function user()

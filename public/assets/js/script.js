@@ -23,6 +23,11 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeModalClose();
     initializeSidebarState();
     initializeGlobalConfirmModal();
+    initializeSearchPenginstalan();
+    initializeSearchTicketLog();
+    initializeSearchTicket();
+    initializeSearchPerbaikan();
+    initializeSearchRekap();
 });
 
 /* ==========================
@@ -860,5 +865,141 @@ function initializeGlobalConfirmModal() {
         if (e.key === "Escape" && overlay.classList.contains("show")) {
             closeConfirm();
         }
+    });
+}
+
+function initializeSearchPenginstalan() {
+    const input = document.getElementById("penginstalanSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".penginstalan-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+
+function initializeSearchPerbaikan() {
+    const input = document.getElementById("perbaikanSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".perbaikan-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+function initializeSearchRekap() {
+    const input = document.getElementById("rekapSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".rekap-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+function initializeSearchTicketLog() {
+    const input = document.getElementById("ticketLogSearch");
+
+    if (!input) return;
+
+    const countEl = document.querySelector(".table-footer-actions span");
+    let searchFrame = 0;
+
+    const filterRows = (keyword) => {
+        const rows = Array.from(document.querySelectorAll("tbody tr.ticket-log-row"));
+        let visibleCount = 0;
+
+        rows.forEach((row) => {
+            const content = row.innerText.toLowerCase();
+            const isVisible = keyword === "" || content.includes(keyword);
+
+            row.style.display = isVisible ? "table-row" : "none";
+
+            if (isVisible) {
+                visibleCount++;
+            }
+        });
+
+        if (countEl) {
+            countEl.textContent = `Total: ${visibleCount} Log`;
+        }
+    };
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.trim().toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            filterRows(keyword);
+        });
+    });
+}
+function initializeSearchTicket() {
+    const input = document.getElementById("ticketSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".ticket-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
     });
 }

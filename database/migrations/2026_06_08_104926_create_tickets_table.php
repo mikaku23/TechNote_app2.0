@@ -31,7 +31,8 @@ return new class extends Migration
                 'processing',
                 'testing',
                 'completed',
-                'failed'
+                'failed',
+                'cancelled'
             ])->default('waiting');
 
             $table->enum('priority', [
@@ -45,6 +46,12 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable();
 
             $table->boolean('is_public')->default(true);
+
+            $table->date('booking_date')->nullable();
+            $table->enum('session', ['morning', 'afternoon'])->nullable();
+            $table->unsignedInteger('queue_number')->nullable();
+            $table->timestamp('scheduled_start')->nullable();
+            $table->timestamp('scheduled_end')->nullable();
 
             $table->timestamps();
 

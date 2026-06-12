@@ -15,13 +15,7 @@ class notification extends Model
         'is_read',
     ];
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    public function ticket()
-    {
-        return $this->belongsTo(ticket::class);
-    }
+    protected $casts = [
+        'is_read' => 'boolean',
+    ];
 }

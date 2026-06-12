@@ -1,0 +1,10 @@
+@extends('errors.layout')
+
+@section('title', '403')
+@section('badge', 'Akses Ditolak')
+@section('code', '403')
+@section('headline', 'Anda tidak memiliki izin akses')
+@section('message', 'Halaman ini memerlukan hak akses yang tidak dimiliki akun saat ini. Jika ini terasa keliru, periksa role akun atau hubungi admin.')
+@section('icon', 'shield-ban')
+@section('status_text', 'Permintaan ditolak oleh sistem keamanan.')
+@section('note', 'Halaman ini hanya dapat dibuka oleh role yang sesuai.')

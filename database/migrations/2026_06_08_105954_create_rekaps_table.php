@@ -14,22 +14,14 @@ return new class extends Migration
         Schema::create('rekaps', function (Blueprint $table) {
             $table->id();
 
-            $table->date('rekap_date');
+            $table->date('rekap_date')->unique();
 
-            $table->integer('total_installations')
-                ->default(0);
+            $table->unsignedInteger('total_installations')->default(0);
+            $table->unsignedInteger('total_repairs')->default(0);
 
-            $table->integer('total_repairs')
-                ->default(0);
-
-            $table->integer('completed_tickets')
-                ->default(0);
-
-            $table->integer('failed_tickets')
-                ->default(0);
-
-            $table->integer('pending_tickets')
-                ->default(0);
+            $table->unsignedInteger('completed_tickets')->default(0);
+            $table->unsignedInteger('failed_tickets')->default(0);
+            $table->unsignedInteger('pending_tickets')->default(0);
 
             $table->timestamps();
         });

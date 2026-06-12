@@ -1,0 +1,10 @@
+@extends('errors.layout')
+
+@section('title', '500')
+@section('badge', 'Kesalahan Server')
+@section('code', '500')
+@section('headline', 'Terjadi kesalahan pada server')
+@section('message', 'Sistem mengalami gangguan internal saat memproses permintaan. Coba lagi setelah beberapa saat.')
+@section('icon', 'server-crash')
+@section('status_text', 'Kesalahan internal server terdeteksi.')
+@section('note', 'Jika error ini terus muncul, periksa log aplikasi dan database.')

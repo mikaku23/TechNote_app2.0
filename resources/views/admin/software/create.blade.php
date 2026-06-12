@@ -55,12 +55,14 @@
                 </div>
 
                 <div class="tn-modal-group">
-                    <label>Status</label>
+                    <label>Estimated Minutes</label>
                     <input
-                        type="text"
+                        type="number"
+                        name="estimated_minutes"
                         class="tn-modal-control"
-                        value="Ready For Installation"
-                        readonly>
+                        placeholder="30"
+                        value="30"
+                        min="1">
                 </div>
 
                 <div class="tn-modal-group tn-modal-full">
@@ -79,9 +81,18 @@
                     Cancel
                 </button>
 
-                <button type="submit" class="btn-primary">
+                <button
+                    type="submit"
+                    class="btn-primary"
+                    data-tn-confirm
+                    data-tn-type="success"
+                    data-tn-title="Save software?"
+                    data-tn-message="The software information will be saved and become available in the system."
+                    data-tn-proceed-text="Save">
+
                     <i data-lucide="save"></i>
                     Save Software
+
                 </button>
             </div>
 

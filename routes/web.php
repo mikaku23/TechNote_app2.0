@@ -1,62 +1,106 @@
 <?php
 
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MahasiswaBookingController;
+use App\Http\Controllers\PenginstalanController;
+use App\Http\Controllers\PerbaikanController;
+use App\Http\Controllers\RekapController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SoftwareController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TrustedWebsiteController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+    Route::get('/', function () {
+        return view('auth.login');
+    })->name('login');
+
+    Route::post('/login', [AuthController::class, 'login'])->name('login.process');
+
+Route::post('/logout', [AuthController::class, 'logout'])
+    ->middleware('auth')
+    ->name('logout');
+
+
+
+
+Route::middleware(['auth', 'role:Admin'])->group(function () {
+    Route::get('/dashboardAdmin', [DashboardController::class, 'admin'])->name('dashboard.admin');
+
+    Route::get('/software/trash', [SoftwareController::class, 'trash'])->name('software.trash');
+    Route::put('/software/{id}/restore', [SoftwareController::class, 'restore'])->name('software.restore');
+    Route::put('/software/restore-all', [SoftwareController::class, 'restoreAll'])->name('software.restoreAll');
+    Route::delete('/software/destroy-all', [SoftwareController::class, 'destroyAll'])->name('software.destroyAll');
+    Route::resource('software', SoftwareController::class);
+
+    Route::get('/role/trash', [RoleController::class, 'trash'])->name('role.trash');
+    Route::put('/role/{id}/restore', [RoleController::class, 'restore'])->name('role.restore');
+    Route::put('/role/restore-all', [RoleController::class, 'restoreAll'])->name('role.restoreAll');
+    Route::post('/role/{role}/toggle-status', [RoleController::class, 'toggleStatus'])->name('role.toggleStatus');
+    Route::resource('role', RoleController::class);
+
+    Route::get('/user/trash', [UserController::class, 'trash'])->name('user.trash');
+    Route::put('/user/{id}/restore', [UserController::class, 'restore'])->name('user.restore');
+    Route::put('/user/restore-all', [UserController::class, 'restoreAll'])->name('user.restoreAll');
+    Route::delete('/user/destroy-all', [UserController::class, 'destroyAll'])->name('user.destroyAll');
+    Route::resource('user', UserController::class);
+
+    Route::resource('trusted', TrustedWebsiteController::class);
+
+    Route::patch(
+        '/penginstalan/{penginstalan}/complete',
+        [PenginstalanController::class, 'forceComplete']
+    )->name('penginstalan.complete');
+
+    Route::patch(
+        '/penginstalan/{penginstalan}/failed',
+        [PenginstalanController::class, 'forceFailed']
+    )->name('penginstalan.failed');
+    Route::get('/penginstalan/trash', [PenginstalanController::class, 'trash'])->name('penginstalan.trash');
+    Route::put('/penginstalan/{id}/restore', [PenginstalanController::class, 'restore'])->name('penginstalan.restore');
+    Route::put('/penginstalan/restore-all', [PenginstalanController::class, 'restoreAll'])->name('penginstalan.restoreAll');
+    Route::resource('penginstalan', PenginstalanController::class);
+
+    Route::get('perbaikan/trash', [PerbaikanController::class, 'trash'])->name('perbaikan.trash');
+    Route::put('perbaikan/{id}/restore', [PerbaikanController::class, 'restore'])->name('perbaikan.restore');
+    Route::put('perbaikan/restore-all', [PerbaikanController::class, 'restoreAll'])->name('perbaikan.restoreAll');
+
+    Route::patch('perbaikan/{perbaikan}/complete', [PerbaikanController::class, 'complete'])->name('perbaikan.complete');
+    Route::patch('perbaikan/{perbaikan}/failed', [PerbaikanController::class, 'failed'])->name('perbaikan.failed');
+    Route::resource('perbaikan', PerbaikanController::class);
+
+    Route::get('/ticket/logs', [TicketController::class, 'logs'])->name('ticket.logs');
+    Route::get('/ticket/{ticket}/logs', [TicketController::class, 'showLogs'])->name('ticket.logs.show');
+    Route::patch('/ticket/{ticket}/status', [TicketController::class, 'updateStatus'])->name('ticket.updateStatus');
+    Route::resource('ticket', TicketController::class);
+
+    Route::resource('rekap', RekapController::class);
 });
 
-Route::get('/software/trash', [SoftwareController::class, 'trash'])
-    ->name('software.trash');
 
-Route::put('/software/{id}/restore', [SoftwareController::class, 'restore'])
-    ->name('software.restore');
 
-Route::put('/software/restore-all', [SoftwareController::class, 'restoreAll'])
-    ->name('software.restoreAll');
 
-Route::delete(
-    '/software/destroy-all',
-    [SoftwareController::class, 'destroyAll']
-)->name('software.destroyAll');
+Route::middleware(['auth', 'role:Mahasiswa'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'mahasiswa'])->name('dashboard.mhs');
 
-Route::resource('software', SoftwareController::class);
+    Route::get(
+        '/mahasiswa/penginstalan/check-availability',
+        [MahasiswaBookingController::class, 'checkAvailability']
+    )->name('mahasiswa.booking.check');
 
-Route::get('/role/trash', [RoleController::class, 'trash'])
-    ->name('role.trash');
+    Route::resource('/mahasiswa/penginstalan', MahasiswaBookingController::class)
+        ->names('mahasiswa.booking')
+        ->parameters(['penginstalan' => 'ticket']);
+});
 
-Route::put('/role/{id}/restore', [RoleController::class, 'restore'])
-    ->name('role.restore');
 
-Route::put('/role/restore-all', [RoleController::class, 'restoreAll'])
-    ->name('role.restoreAll');
 
-Route::post('/role/{role}/toggle-status', [RoleController::class, 'toggleStatus'])
-    ->name('role.toggleStatus');
-Route::resource('role', RoleController::class);
 
-Route::get(
-    '/user/trash',
-    [UserController::class, 'trash']
-)->name('user.trash');
 
-Route::put(
-    '/user/{id}/restore',
-    [UserController::class, 'restore']
-)->name('user.restore');
+Route::middleware(['auth', 'role:Dosen'])->group(function () {
+    Route::get('/dashboard/dosen', [DashboardController::class, 'dosen'])->name('dashboard.dosen');
 
-Route::put(
-    '/user/restore-all',
-    [UserController::class, 'restoreAll']
-)->name('user.restoreAll');
-Route::delete(
-    '/user/destroy-all',
-    [UserController::class, 'destroyAll']
-)->name('user.destroyAll');
-Route::resource('user', UserController::class);
-
-Route::resource('trusted', TrustedWebsiteController::class);
+    // route dosen lain di sini
+});

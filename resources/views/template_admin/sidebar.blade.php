@@ -12,15 +12,19 @@
     <nav class="sidebar-nav">
 
         <!-- DASHBOARD -->
-        <a href="#" class="nav-item " data-nav="dashboard">
+        <a href="{{ route('dashboard.admin') }}" class="nav-item {{ $menu == 'dashboardAdmin' ? 'active' : '' }}" data-nav="dashboard">
             <i data-lucide="layout-dashboard"></i>
             <span class="nav-label">Dashboard</span>
         </a>
 
         <!-- SERVICE -->
-        <div class="nav-group" data-group="service">
+        <div class="nav-group {{ in_array($menu, ['ticket', 'penginstalan', 'perbaikan', 'rekap']) ? 'active open' : '' }}"
+            data-group="service">
 
-            <button class="nav-dropdown" type="button" aria-expanded="false">
+            <button class="nav-dropdown"
+                type="button"
+                aria-expanded="{{ in_array($menu, ['ticket', 'penginstalan', 'perbaikan', 'rekap']) ? 'true' : 'false' }}">
+
                 <div class="nav-dropdown-left">
                     <i data-lucide="ticket"></i>
                     <span class="nav-label">Service</span>
@@ -31,22 +35,22 @@
 
             <!-- SERVICE -->
             <div class="dropdown-menu">
-                <a href="#" class="dropdown-item" data-parent="service">
+                <a href="{{ route('ticket.index') }}" class="dropdown-item {{ $menu == 'ticket' ? 'active' : '' }}" data-parent="service">
                     <i data-lucide="ticket"></i>
                     <span>Tickets</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="service">
+                <a href="{{ route('penginstalan.index') }}" class="dropdown-item {{ $menu == 'penginstalan' ? 'active' : '' }}" data-parent="service">
                     <i data-lucide="download"></i>
                     <span>Penginstalan</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="service">
+                <a href="{{ route('perbaikan.index') }}" class="dropdown-item {{ $menu == 'perbaikan' ? 'active' : '' }}" data-parent="service">
                     <i data-lucide="wrench"></i>
                     <span>Perbaikan</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="service">
+                <a href="{{ route('rekap.index') }}" class="dropdown-item {{ $menu == 'rekap' ? 'active' : '' }}" data-parent="service">
                     <i data-lucide="clipboard-list"></i>
                     <span>Rekap</span>
                 </a>
@@ -54,43 +58,43 @@
 
         </div>
 
-            <!-- USERS -->
-            <div class="nav-group {{ in_array($menu, ['user', 'role']) ? 'active open' : '' }}">
+        <!-- USERS -->
+        <div class="nav-group {{ in_array($menu, ['user', 'role']) ? 'active open' : '' }}">
 
-                <button class="nav-dropdown">
+            <button class="nav-dropdown">
 
-                    <div class="nav-dropdown-left">
-                        <i data-lucide="users"></i>
-                        <span class="nav-label">Users</span>
-                    </div>
-
-                    <i data-lucide="chevron-down" class="dropdown-arrow"></i>
-
-                </button>
-
-                <div class="dropdown-menu">
-
-                    <a href="{{ route('user.index') }}"
-                        class="dropdown-item {{ $menu == 'user' ? 'active' : '' }}"
-                        data-parent="users">
-
-                        <i data-lucide="users-round"></i>
-                        <span>User Management</span>
-
-                    </a>
-
-                    <a href="{{ route('role.index') }}"
-                        class="dropdown-item {{ $menu == 'role' ? 'active' : '' }}"
-                        data-parent="users">
-
-                        <i data-lucide="shield-check"></i>
-                        <span>Roles & Permissions</span>
-
-                    </a>
-
+                <div class="nav-dropdown-left">
+                    <i data-lucide="users"></i>
+                    <span class="nav-label">Users</span>
                 </div>
 
+                <i data-lucide="chevron-down" class="dropdown-arrow"></i>
+
+            </button>
+
+            <div class="dropdown-menu">
+
+                <a href="{{ route('user.index') }}"
+                    class="dropdown-item {{ $menu == 'user' ? 'active' : '' }}"
+                    data-parent="users">
+
+                    <i data-lucide="users-round"></i>
+                    <span>User Management</span>
+
+                </a>
+
+                <a href="{{ route('role.index') }}"
+                    class="dropdown-item {{ $menu == 'role' ? 'active' : '' }}"
+                    data-parent="users">
+
+                    <i data-lucide="shield-check"></i>
+                    <span>Roles & Permissions</span>
+
+                </a>
+
             </div>
+
+        </div>
 
         <!-- AI -->
         <div class="nav-group" data-group="ai">

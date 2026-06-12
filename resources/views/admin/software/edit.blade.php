@@ -59,12 +59,14 @@
                 </div>
 
                 <div class="tn-modal-group">
-                    <label>Status</label>
+                    <label>Estimated Minutes</label>
                     <input
-                        type="text"
+                        type="number"
+                        name="estimated_minutes"
                         class="tn-modal-control"
-                        value="Available"
-                        readonly>
+                        value="{{ old('estimated_minutes', $software->estimated_minutes) }}"
+                        placeholder="30"
+                        min="1">
                 </div>
 
                 <div class="tn-modal-group tn-modal-full">

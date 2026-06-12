@@ -15,4 +15,8 @@ class ai_cache extends Model
         'source',
         'expired_at',
     ];
+
+    protected $casts = [
+        'expired_at' => 'datetime',
+    ];
 }

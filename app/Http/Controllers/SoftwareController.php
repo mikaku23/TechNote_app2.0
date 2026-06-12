@@ -27,18 +27,21 @@ class SoftwareController extends Controller
     public function store(Request $request)
     {
         $messages = [
-            'name.required'        => 'Please enter the software name.',
-            'name.max'             => 'Software name may not be greater than :max characters.',
-            'developer.max'        => 'Developer name may not be greater than :max characters.',
-            'version.max'          => 'Version may not be greater than :max characters.',
-            'description.string'   => 'Description must be text.',
+            'name.required'              => 'Please enter the software name.',
+            'name.max'                   => 'Software name may not be greater than :max characters.',
+            'developer.max'              => 'Developer name may not be greater than :max characters.',
+            'version.max'                => 'Version may not be greater than :max characters.',
+            'description.string'         => 'Description must be text.',
+            'estimated_minutes.numeric'  => 'Estimated minutes must be a number.',
+            'estimated_minutes.min'      => 'Estimated minutes must be at least 1.',
         ];
 
         $validator = Validator::make($request->all(), [
-            'name'        => 'required|string|max:255',
-            'developer'   => 'nullable|string|max:255',
-            'version'     => 'nullable|string|max:255',
-            'description' => 'nullable|string',
+            'name'               => 'required|string|max:255',
+            'developer'          => 'nullable|string|max:255',
+            'version'            => 'nullable|string|max:255',
+            'description'        => 'nullable|string',
+            'estimated_minutes'  => 'nullable|numeric|min:1',
         ], $messages);
 
         if ($validator->fails()) {
@@ -49,10 +52,11 @@ class SoftwareController extends Controller
         }
 
         Software::create([
-            'name'        => $request->name,
-            'developer'   => $request->developer,
-            'version'     => $request->version,
-            'description' => $request->description,
+            'name'               => $request->name,
+            'developer'          => $request->developer,
+            'version'            => $request->version,
+            'description'        => $request->description,
+            'estimated_minutes'  => $request->estimated_minutes ?? 30,
         ]);
 
         return redirect()
@@ -79,25 +83,29 @@ class SoftwareController extends Controller
     public function update(Request $request, Software $software)
     {
         $messages = [
-            'name.required'        => 'Please enter the software name.',
-            'name.max'             => 'Software name may not be greater than :max characters.',
-            'developer.max'        => 'Developer name may not be greater than :max characters.',
-            'version.max'          => 'Version may not be greater than :max characters.',
-            'description.string'   => 'Description must be text.',
+            'name.required'              => 'Please enter the software name.',
+            'name.max'                   => 'Software name may not be greater than :max characters.',
+            'developer.max'              => 'Developer name may not be greater than :max characters.',
+            'version.max'                => 'Version may not be greater than :max characters.',
+            'description.string'         => 'Description must be text.',
+            'estimated_minutes.numeric'  => 'Estimated minutes must be a number.',
+            'estimated_minutes.min'      => 'Estimated minutes must be at least 1.',
         ];
 
         $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'developer'   => 'nullable|string|max:255',
-            'version'     => 'nullable|string|max:255',
-            'description' => 'nullable|string',
+            'name'               => 'required|string|max:255',
+            'developer'          => 'nullable|string|max:255',
+            'version'            => 'nullable|string|max:255',
+            'description'        => 'nullable|string',
+            'estimated_minutes'  => 'nullable|numeric|min:1',
         ], $messages);
 
         $software->update([
-            'name'        => $validated['name'],
-            'developer'   => $validated['developer'],
-            'version'     => $validated['version'],
-            'description' => $validated['description'],
+            'name'               => $validated['name'],
+            'developer'          => $validated['developer'],
+            'version'            => $validated['version'],
+            'description'        => $validated['description'],
+            'estimated_minutes'  => $validated['estimated_minutes'] ?? $software->estimated_minutes,
         ]);
 
         return redirect()

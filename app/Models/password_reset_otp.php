@@ -13,6 +13,11 @@ class password_reset_otp extends Model
         'used_at',
     ];
 
+    protected $casts = [
+        'expired_at' => 'datetime',
+        'used_at' => 'datetime',
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);

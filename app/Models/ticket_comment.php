@@ -13,6 +13,10 @@ class ticket_comment extends Model
         'is_internal',
     ];
 
+    protected $casts = [
+        'is_internal' => 'boolean',
+    ];
+
     public function ticket()
     {
         return $this->belongsTo(ticket::class);

@@ -1,0 +1,10 @@
+@extends('errors.layout')
+
+@section('title', '419')
+@section('badge', 'Sesi Berakhir')
+@section('code', '419')
+@section('headline', 'Sesi sudah habis')
+@section('message', 'Halaman ini tidak bisa diproses karena sesi sudah kedaluwarsa. Silakan masuk ulang dan kirim permintaan kembali.')
+@section('icon', 'clock-3')
+@section('status_text', 'Token CSRF atau sesi login sudah tidak valid.')
+@section('note', 'Biasanya terjadi setelah terlalu lama diam atau halaman disegarkan.')

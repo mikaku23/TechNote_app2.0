@@ -63,9 +63,9 @@
             </div>
 
             <div class="tn-modal-group">
-                <label>Status</label>
+                <label>Estimated Minutes</label>
                 <div class="tn-modal-control tn-modal-readonly">
-                    Available
+                    {{ $software->estimated_minutes }} minutes
                 </div>
             </div>
 

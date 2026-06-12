@@ -12,4 +12,10 @@ class maintenance extends Model
         'started_at',
         'ended_at',
     ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'started_at' => 'datetime',
+        'ended_at' => 'datetime',
+    ];
 }

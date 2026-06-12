@@ -16,6 +16,84 @@
     <link rel="stylesheet" href="{{ asset('assets/css/card.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/popupconfirmation.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/table.css') }}">
+
+    <style>
+        .table-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+
+        .btn-icon {
+            width: 38px;
+            height: 38px;
+
+            border-radius: 12px;
+            border: none;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            cursor: pointer;
+
+            transition: .25s ease;
+
+            backdrop-filter: blur(10px);
+        }
+
+
+        .btn-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+
+
+        /* detail */
+        .btn-icon.secondary {
+            background: rgba(255, 255, 255, .08);
+            color: #fff;
+        }
+
+
+
+        /* selesai */
+        .btn-icon.success {
+            background: rgba(34, 197, 94, .18);
+            color: #22c55e;
+        }
+
+
+
+        /* gagal */
+        .btn-icon.danger {
+            background: rgba(239, 68, 68, .18);
+            color: #ef4444;
+        }
+
+
+
+        .btn-icon:hover:not(.disabled-action) {
+            transform: translateY(-2px);
+        }
+
+
+
+        /* tiket sudah final */
+        .disabled-action {
+
+            opacity: .35;
+
+            filter: grayscale(1);
+
+            cursor: default !important;
+
+            pointer-events: none;
+
+        }
+    </style>
     @yield('css')
 </head>
 

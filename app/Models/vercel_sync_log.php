@@ -13,6 +13,10 @@ class vercel_sync_log extends Model
         'synced_at',
     ];
 
+    protected $casts = [
+        'synced_at' => 'datetime',
+    ];
+
     public function ticket()
     {
         return $this->belongsTo(ticket::class);
