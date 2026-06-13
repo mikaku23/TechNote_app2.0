@@ -96,26 +96,29 @@
 
             </div>
 
-            <div
-                class="profile-dropdown glass"
-                id="profileDropdown">
-
-                <a href="#">
+            <div class="profile-dropdown glass" id="profileDropdown">
+                <button
+                    type="button"
+                    class="profile-dropdown-link open-modal"
+                    data-url="{{ route('profile.show') }}">
                     <i data-lucide="user"></i>
                     <span>View Profile</span>
-                </a>
+                </button>
 
-                <a href="#">
+                <button
+                    type="button"
+                    class="profile-dropdown-link open-modal"
+                    data-url="{{ route('settings.show') }}">
                     <i data-lucide="settings"></i>
                     <span>Settings</span>
-                </a>
+                </button>
 
                 <hr>
 
                 <form action="{{ route('logout') }}" method="POST">
                     @csrf
 
-                    <button type="submit" class="profile-dropdown-link">
+                    <button type="submit" class="profile-dropdown-link logout">
                         <i data-lucide="log-out"></i>
                         <span>Logout</span>
                     </button>
