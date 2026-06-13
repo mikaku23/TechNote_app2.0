@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Models\user_activitie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -103,6 +104,15 @@ class UserController extends Controller
         }
 
         User::create($data);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'create',
+            'description' => 'Admin Membuat data user.',
+            'old_data' => null,
+            'new_data' => $data,
+        ]);
 
         return redirect()
             ->route('user.index')
@@ -214,7 +224,18 @@ class UserController extends Controller
             $data['avatar'] = $request->file('avatar')->store('avatars/users', 'public');
         }
 
+        $oldData = $user->toArray();
+
         $user->update($data);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'update',
+            'description' => 'Admin mengedit data user.',
+            'old_data' => $oldData,
+            'new_data' => $data,
+        ]);
 
         return redirect()
             ->route('user.index')
@@ -229,7 +250,18 @@ class UserController extends Controller
             ]);
         }
 
+        $oldData = $user->toArray();
+
         $user->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'delete',
+            'description' => 'Admin menghapus data user.',
+            'old_data' => $oldData,
+            'new_data' => 'deleted',
+        ]);
 
         return redirect()
             ->route('user.index')
@@ -254,6 +286,15 @@ class UserController extends Controller
             ->findOrFail($id)
             ->restore();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'restore',
+            'description' => 'Admin mengembalikan data user.',
+            'old_data' => null,
+            'new_data' => 'restored',
+        ]);
+
         return back()->with(
             'success',
             'User restored successfully.'
@@ -265,6 +306,15 @@ class UserController extends Controller
         User::onlyTrashed()
             ->restore();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'restore all',
+            'description' => 'Admin mengembalikan semua data user.',
+            'old_data' => null,
+            'new_data' => 'restored all',
+        ]);
+
         return back()->with(
             'success',
             'All users restored successfully.'
@@ -275,6 +325,15 @@ class UserController extends Controller
         User::whereHas('role', function ($q) {
             $q->where('name', '!=', 'Admin');
         })->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'delete',
+            'description' => 'Admin menghapus data user.',
+            'old_data' => null,
+            'new_data' => 'deleted all non-admin users',
+        ]);
 
         return redirect()
             ->route('user.index')
@@ -323,7 +382,18 @@ class UserController extends Controller
             $data['avatar'] = $request->file('avatar')->store('avatars/users', 'public');
         }
 
+        $oldData = $user->toArray();
+
         $user->update($data);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'update profile',
+            'description' => 'update data profile miliknya.',
+            'old_data' => $oldData,
+            'new_data' => $data,
+        ]);
 
         return back()->with('edit', 'Profile updated successfully.');
     }
@@ -355,6 +425,15 @@ class UserController extends Controller
             'last_password_changed_at' => now(),
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'update password',
+            'description' => 'update password miliknya.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with('edit', 'Password updated successfully.');
     }
 
@@ -377,6 +456,15 @@ class UserController extends Controller
         $user->update([
             'security_question' => $validated['security_question'],
             'security_answer'   => $validated['security_answer'],
+        ]);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'update security question',
+            'description' => 'update pertanyaan keamanan miliknya.',
+            'old_data' => null,
+            'new_data' => null,
         ]);
 
         return back()->with('edit', 'Security question updated successfully.');
@@ -466,6 +554,15 @@ class UserController extends Controller
         Auth::logout();
 
         User::findOrFail($user->id)->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'User',
+            'activity' => 'delete own account',
+            'description' => 'User menghapus akunnya sendiri.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ticket;
 use App\Models\ticket_status_log;
 use App\Models\User;
+use App\Models\user_activitie;
 use App\Services\TicketFlowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -97,6 +98,15 @@ class TicketController extends Controller
             ]);
         }
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Ticket',
+            'activity' => 'update',
+            'description' => 'mengupdate data ticket.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('ticket.index')
             ->with('edit', 'Ticket updated successfully.');
@@ -151,6 +161,15 @@ class TicketController extends Controller
             Auth::id()
         );
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Ticket',
+            'activity' => 'update status',
+            'description' => 'mengupdate status ticket.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('ticket.show', $ticket->id)
             ->with('success', 'Ticket status updated successfully.');
@@ -160,6 +179,15 @@ class TicketController extends Controller
     {
         $ticket->delete();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Ticket',
+            'activity' => 'delete',
+            'description' => 'menghapus data ticket.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+        
         return redirect()
             ->route('ticket.index')
             ->with('success', 'Ticket moved to recycle bin.');

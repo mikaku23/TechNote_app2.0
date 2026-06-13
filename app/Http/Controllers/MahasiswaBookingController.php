@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Software;
 use App\Models\ticket;
+use App\Models\user_activitie;
 use App\Services\InstallationBookingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -365,6 +366,15 @@ class MahasiswaBookingController extends Controller
                 ->withInput();
         }
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Booking Mahasiswa',
+            'activity' => 'create',
+            'description' => 'menambahkan data booking baru.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('mahasiswa.booking.index')
             ->with('success', 'Booking berhasil dibuat. Ticket telah digenerate otomatis.');
@@ -395,6 +405,15 @@ class MahasiswaBookingController extends Controller
             'changed_by'   => Auth::id(),
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Booking Mahasiswa',
+            'activity' => 'update',
+            'description' => 'memperbarui data booking.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('mahasiswa.booking.show', $ticket->id)
             ->with('success', 'Booking berhasil diperbarui.');
@@ -416,6 +435,15 @@ class MahasiswaBookingController extends Controller
         }
 
         $this->bookingService->cancelBooking($ticket, Auth::id());
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Booking Mahasiswa',
+            'activity' => 'cancel',
+            'description' => 'membatalkan data booking.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('mahasiswa.booking.index')

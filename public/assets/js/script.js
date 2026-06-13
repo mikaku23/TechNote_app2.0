@@ -28,6 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeSearchTicket();
     initializeSearchPerbaikan();
     initializeSearchRekap();
+    initializeSearchLog();
+    initializeSearchUserLog();
 });
 
 /* ==========================
@@ -898,6 +900,30 @@ function initializeSearchPenginstalan() {
     });
 }
 
+function initializeSearchLog() {
+    const input = document.getElementById("LoginLogSearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".log-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
 function initializeSearchPerbaikan() {
     const input = document.getElementById("perbaikanSearch");
 
@@ -922,6 +948,31 @@ function initializeSearchPerbaikan() {
         });
     });
 }
+function initializeSearchUserLog() {
+    const input = document.getElementById("UserActivitySearch");
+
+    if (!input) return;
+
+    const rows = Array.from(document.querySelectorAll(".activity-row"));
+    let searchFrame = 0;
+
+    input.addEventListener("input", function () {
+        const keyword = this.value.toLowerCase();
+
+        cancelAnimationFrame(searchFrame);
+
+        searchFrame = requestAnimationFrame(() => {
+            rows.forEach((row) => {
+                row.style.display = row.textContent
+                    .toLowerCase()
+                    .includes(keyword)
+                    ? ""
+                    : "none";
+            });
+        });
+    });
+}
+
 function initializeSearchRekap() {
     const input = document.getElementById("rekapSearch");
 

@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'login_anchor' => [
+        'latitude' => env('LOGIN_ANCHOR_LAT'),
+        'longitude' => env('LOGIN_ANCHOR_LNG'),
+        'radius' => env('LOGIN_ALLOWED_RADIUS', 50),
+    ],
 ];

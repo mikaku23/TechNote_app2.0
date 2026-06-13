@@ -30,6 +30,12 @@ return new class extends Migration
                 'offline'
             ]);
 
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->decimal('accuracy_m', 10, 2)->nullable();
+            $table->decimal('distance_from_anchor_m', 10, 2)->nullable();
+            $table->string('location_status')->nullable(); // inside, outside, unknown
+
             $table->timestamp('login_at')
                 ->nullable();
 

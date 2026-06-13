@@ -134,7 +134,7 @@
         </div>
 
         <!-- MONITORING -->
-        <div class="nav-group" data-group="monitoring">
+        <div class="nav-group {{ in_array($menu, ['login-log', 'user-activity']) ? 'active open' : '' }}">
 
             <button class="nav-dropdown" type="button" aria-expanded="false">
                 <div class="nav-dropdown-left">
@@ -146,18 +146,20 @@
             </button>
 
             <!-- MONITORING -->
-            <div class="dropdown-menu">
+            <div class="dropdown-menu ">
                 <a href="#" class="dropdown-item" data-parent="monitoring">
                     <i data-lucide="bell"></i>
                     <span>Notifications</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="monitoring">
+                <a href="{{ route('login-log.index') }}" 
+                class="dropdown-item {{ $menu == 'login-log' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="log-in"></i>
                     <span>Login Logs</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="monitoring">
+                <a href="{{ route('user-activity.index') }}" 
+                class="dropdown-item {{ $menu == 'user-activity' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="history"></i>
                     <span>User Activities</span>
                 </a>

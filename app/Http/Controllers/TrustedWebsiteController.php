@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\trusted_website;
 use App\Models\TrustedWebsite;
+use App\Models\user_activitie;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class TrustedWebsiteController extends Controller
@@ -45,6 +47,15 @@ class TrustedWebsiteController extends Controller
         ], $messages);
 
         trusted_website::create($validated);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'TrustedWebsite',
+            'activity' => 'create',
+            'description' => 'menambahkan data trusted website baru.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('trusted.index')
@@ -88,6 +99,15 @@ class TrustedWebsiteController extends Controller
 
         $trusted->update($validated);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'TrustedWebsite',
+            'activity' => 'update',
+            'description' => 'mengupdate data trusted website.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('trusted.index')
             ->with('success', 'Trusted website updated successfully.');
@@ -96,6 +116,15 @@ class TrustedWebsiteController extends Controller
     public function destroy(trusted_website $trusted)
     {
         $trusted->delete();
+        
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'TrustedWebsite',
+            'activity' => 'delete',
+            'description' => 'menghapus data trusted website.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('trusted.index')

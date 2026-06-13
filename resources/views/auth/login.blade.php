@@ -307,7 +307,7 @@
                 <script>
                     window.location = "{{ route('dashboard.mhs') }}";
                 </script>
-                
+
                 @endif
                 @endif
 
@@ -397,6 +397,10 @@
                     </div>
                 </div>
 
+                <input type="hidden" name="latitude" id="latitude">
+                <input type="hidden" name="longitude" id="longitude">
+                <input type="hidden" name="accuracy_m" id="accuracy_m">
+
                 <button type="submit" class="btn-primary login-submit">
                     <i data-lucide="log-in"></i>
                     Masuk
@@ -469,6 +473,64 @@
 
             loop();
         });
+    </script>
+    <script>
+        let bestFix = null;
+        let watchId = null;
+
+        function applyLocation(position) {
+            const fix = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                acc: position.coords.accuracy
+            };
+
+            if (!bestFix || fix.acc < bestFix.acc) {
+                bestFix = fix;
+
+                const lat = document.getElementById('latitude');
+                const lng = document.getElementById('longitude');
+                const acc = document.getElementById('accuracy_m');
+
+                if (lat) lat.value = fix.lat;
+                if (lng) lng.value = fix.lng;
+                if (acc) acc.value = fix.acc;
+            }
+        }
+
+        function startLocationCapture() {
+            if (!navigator.geolocation) return;
+
+            navigator.geolocation.getCurrentPosition(
+                applyLocation,
+                function(error) {
+                    console.log('Geolocation error:', error.message);
+                }, {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                }
+            );
+
+            watchId = navigator.geolocation.watchPosition(
+                applyLocation,
+                function(error) {
+                    console.log('Watch error:', error.message);
+                }, {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                }
+            );
+
+            setTimeout(function() {
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                }
+            }, 8000);
+        }
+
+        document.addEventListener('DOMContentLoaded', startLocationCapture);
     </script>
 </body>
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Perbaikan;
 use App\Models\User;
+use App\Models\user_activitie;
 use App\Services\RepairService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -61,6 +62,15 @@ class PerbaikanController extends Controller
             'is_public'          => (int) $validated['is_public'],
             'note'               => $validated['note'] ?? null,
             'changed_by'         => Auth::id(),
+        ]);
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'create',
+            'description' => 'menambahkan data perbaikan baru.',
+            'old_data' => null,
+            'new_data' => null,
         ]);
 
         return redirect()
@@ -129,6 +139,15 @@ class PerbaikanController extends Controller
             'changed_by'         => Auth::id(),
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'update',
+            'description' => 'mengupdate data perbaikan.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('perbaikan.index')
             ->with('edit', 'Repair updated successfully.');
@@ -137,6 +156,15 @@ class PerbaikanController extends Controller
     public function destroy(Perbaikan $perbaikan)
     {
         $this->repairService->deleteRepair($perbaikan, Auth::id());
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'delete',
+            'description' => 'menghapus data perbaikan.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('perbaikan.index')
@@ -162,6 +190,15 @@ class PerbaikanController extends Controller
 
         $this->repairService->restoreRepair($perbaikan, Auth::id());
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'restore',
+            'description' => 'mengembalikan data perbaikan.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with('success', 'Repair restored successfully.');
     }
 
@@ -172,6 +209,15 @@ class PerbaikanController extends Controller
         foreach ($trashItems as $perbaikan) {
             $this->repairService->restoreRepair($perbaikan, Auth::id());
         }
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'restore all',
+            'description' => 'mengembalikan semua data perbaikan.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return back()->with('success', 'All repairs restored successfully.');
     }
@@ -188,6 +234,15 @@ class PerbaikanController extends Controller
 
         $this->repairService->finishTicket($perbaikan->ticket, 'completed', Auth::id());
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'complete force ticket',
+            'description' => 'menyelesaikan secara paksa status data perbaikan.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with('success', 'Ticket berhasil diselesaikan.');
     }
 
@@ -202,6 +257,15 @@ class PerbaikanController extends Controller
         }
 
         $this->repairService->finishTicket($perbaikan->ticket, 'failed', Auth::id());
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Perbaikan',
+            'activity' => 'failed force ticket',
+            'description' => 'menandai data perbaikan sebagai gagal secara paksa.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return back()->with('success', 'Ticket berhasil ditandai gagal.');
     }

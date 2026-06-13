@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Software;
+use App\Models\user_activitie;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class SoftwareController extends Controller
@@ -59,6 +61,15 @@ class SoftwareController extends Controller
             'estimated_minutes'  => $request->estimated_minutes ?? 30,
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'create',
+            'description' => 'menambahkan data software baru.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('software.index')
             ->with('success', 'Software created successfully.');
@@ -108,6 +119,15 @@ class SoftwareController extends Controller
             'estimated_minutes'  => $validated['estimated_minutes'] ?? $software->estimated_minutes,
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'update',
+            'description' => 'mengupdate data software.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('software.index')
             ->with('edit', 'Software updated successfully.');
@@ -116,6 +136,15 @@ class SoftwareController extends Controller
     public function destroy(Software $software)
     {
         $software->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'delete',
+            'description' => 'menghapus data software.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('software.index')
@@ -141,6 +170,15 @@ class SoftwareController extends Controller
             ->findOrFail($id)
             ->restore();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'restore',
+            'description' => 'mengembalikan data software yang dihapus.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with(
             'success',
             'Software restored successfully.'
@@ -151,6 +189,15 @@ class SoftwareController extends Controller
         Software::onlyTrashed()
             ->restore();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'restore all',
+            'description' => 'mengembalikan semua data software yang dihapus.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with(
             'success',
             'All software restored successfully.'
@@ -159,6 +206,15 @@ class SoftwareController extends Controller
     public function destroyAll()
     {
         Software::query()->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Software',
+            'activity' => 'delete all',
+            'description' => 'menghapus semua data software.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('software.index')

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Role;
+use App\Models\user_activitie;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class RoleController extends Controller
@@ -52,6 +54,15 @@ class RoleController extends Controller
             'is_active'   => true,
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Role',
+            'activity' => 'create',
+            'description' => 'menambahkan data role baru.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return redirect()
             ->route('role.index')
             ->with('success', 'Role created successfully.');
@@ -70,6 +81,15 @@ class RoleController extends Controller
             'is_active' => ! $role->is_active,
         ]);
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Role',
+            'activity' => 'update status',
+            'description' => 'mengupdate status role.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with(
             'success',
             $role->is_active
@@ -81,6 +101,15 @@ class RoleController extends Controller
     public function destroy(Role $role)
     {
         $role->delete();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Role',
+            'activity' => 'delete',
+            'description' => 'menghapus data role.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return redirect()
             ->route('role.index')
@@ -102,12 +131,30 @@ class RoleController extends Controller
             ->findOrFail($id)
             ->restore();
 
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Role',
+            'activity' => 'restore',
+            'description' => 'mengembalikan data role.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
+
         return back()->with('success', 'Role restored successfully.');
     }
 
     public function restoreAll()
     {
         Role::onlyTrashed()->restore();
+
+        user_activitie::create([
+            'user_id' => Auth::id(),
+            'module' => 'Role',
+            'activity' => 'restore all',
+            'description' => 'mengembalikan semua data role.',
+            'old_data' => null,
+            'new_data' => null,
+        ]);
 
         return back()->with('success', 'All roles restored successfully.');
     }

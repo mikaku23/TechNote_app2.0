@@ -9,16 +9,6 @@
         <p>Manage software installation records.</p>
     </div>
 
-    <button
-        type="button"
-        class="btn-primary open-modal"
-        data-url="{{ route('penginstalan.create') }}">
-
-        <i data-lucide="plus"></i>
-        <span>Add Installation</span>
-
-    </button>
-
 </div>
 
 @if (session('success'))

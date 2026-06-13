@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LoginLogController;
 use App\Http\Controllers\MahasiswaBookingController;
 use App\Http\Controllers\PenginstalanController;
 use App\Http\Controllers\PerbaikanController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SoftwareController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TrustedWebsiteController;
+use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -66,6 +68,8 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {
+    Route::resource('login-log', LoginLogController::class)->only(['index', 'show']);
+
     Route::get('/dashboardAdmin', [DashboardController::class, 'admin'])->name('dashboard.admin');
 
     Route::get('/software/trash', [SoftwareController::class, 'trash'])->name('software.trash');
@@ -116,6 +120,8 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::resource('ticket', TicketController::class);
 
     Route::resource('rekap', RekapController::class);
+
+    Route::resource('user-activity', UserActivityController::class)->only(['index', 'show']);
 });
 
 

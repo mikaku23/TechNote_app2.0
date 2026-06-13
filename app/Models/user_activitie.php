@@ -16,8 +16,8 @@ class user_activitie extends Model
     ];
 
     protected $casts = [
-        'old_data' => 'json',
-        'new_data' => 'json',
+        'old_data' => 'array',
+        'new_data' => 'array',
     ];
 
     public function user()
