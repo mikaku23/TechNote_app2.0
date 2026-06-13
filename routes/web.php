@@ -26,6 +26,44 @@ Route::post('/logout', [AuthController::class, 'logout'])
 Route::get('/ticket/qr/{token}', [TicketController::class, 'showByQr'])
     ->name('ticket.qr.show');
 
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/profile', function () {
+        return view('auth.profile');
+    })->name('profile.show');
+
+    Route::get('/settings', function () {
+        return view('auth.settings');
+    })->name('settings.show');
+
+    Route::get('/settings/profile', function () {
+        return view('auth.settings_profile');
+    })->name('settings.profile');
+
+    Route::get('/settings/password', function () {
+        return view('auth.settings_password');
+    })->name('settings.password');
+
+    Route::get('/settings/security', function () {
+        return view('auth.settings_security');
+    })->name('settings.security');
+
+    Route::put('/settings/profile', [UserController::class, 'updateProfile'])
+        ->name('settings.profile.update');
+
+    Route::put('/settings/password', [UserController::class, 'updatePassword'])
+        ->name('settings.password.update');
+
+    Route::put('/settings/security', [UserController::class, 'updateSecurityQuestion'])
+        ->name('settings.security.update');
+
+    Route::get('/settings/delete', function () {
+        return view('auth.settings_delete_account');
+    })->name('settings.delete');
+
+    Route::delete('/settings/account', [UserController::class, 'destroyOwnAccount'])
+        ->name('settings.destroy');
+});
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/dashboardAdmin', [DashboardController::class, 'admin'])->name('dashboard.admin');

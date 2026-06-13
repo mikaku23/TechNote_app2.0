@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
@@ -222,6 +223,12 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        if ($user->role && $user->role->name === 'Admin') {
+            return back()->withErrors([
+                'error' => 'Admin account cannot be deleted.'
+            ]);
+        }
+
         $user->delete();
 
         return redirect()
@@ -265,13 +272,209 @@ class UserController extends Controller
     }
     public function destroyAll()
     {
-        User::query()->delete();
+        User::whereHas('role', function ($q) {
+            $q->where('name', '!=', 'Admin');
+        })->delete();
 
         return redirect()
             ->route('user.index')
+            ->with('success', 'Non-admin users deleted successfully.');
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $user = User::findOrFail(Auth::id());
+
+        $messages = [
+            'name.required'     => 'Please enter your name.',
+            'name.max'          => 'Name may not be greater than :max characters.',
+            'email.email'       => 'Please enter a valid email address.',
+            'email.max'         => 'Email may not be greater than :max characters.',
+            'email.unique'      => 'This email is already registered.',
+            'no_hp.required'    => 'Please enter your phone number.',
+            'no_hp.max'         => 'Phone number may not be greater than :max characters.',
+            'avatar.image'      => 'Avatar must be an image file.',
+            'avatar.max'        => 'Avatar must not be greater than :max kilobytes.',
+        ];
+
+        $validated = $request->validate([
+            'name'   => ['required', 'string', 'max:255'],
+            'email'  => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
+            'no_hp'  => ['required', 'string', 'max:255'],
+            'avatar' => ['nullable', 'image', 'max:2048'],
+        ], $messages);
+
+        $data = [
+            'name'   => $validated['name'],
+            'email'  => $validated['email'] ?? null,
+            'no_hp'  => $validated['no_hp'],
+        ];
+
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+
+            $data['avatar'] = $request->file('avatar')->store('avatars/users', 'public');
+        }
+
+        $user->update($data);
+
+        return back()->with('edit', 'Profile updated successfully.');
+    }
+
+    public function updatePassword(Request $request)
+    {
+        $user = User::findOrFail(Auth::id());
+
+        $messages = [
+            'current_password.required' => 'Please enter your current password.',
+            'password.required'        => 'Please enter a new password.',
+            'password.min'             => 'Password must be at least :min characters long.',
+            'password.confirmed'       => 'Password confirmation does not match.',
+        ];
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password'         => ['required', 'string', 'min:3', 'confirmed'],
+        ], $messages);
+
+        if (!Hash::check($validated['current_password'], $user->password)) {
+            return back()
+                ->withErrors(['current_password' => 'Current password is incorrect.'])
+                ->withInput();
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+            'last_password_changed_at' => now(),
+        ]);
+
+        return back()->with('edit', 'Password updated successfully.');
+    }
+
+    public function updateSecurityQuestion(Request $request)
+    {
+        $user = User::findOrFail(Auth::id());
+
+        $messages = [
+            'security_question.required' => 'Please enter a security question.',
+            'security_question.max'      => 'Security question may not be greater than :max characters.',
+            'security_answer.required'   => 'Please enter a security answer.',
+            'security_answer.max'        => 'Security answer may not be greater than :max characters.',
+        ];
+
+        $validated = $request->validate([
+            'security_question' => ['required', 'string', 'max:255'],
+            'security_answer'   => ['required', 'string', 'max:255'],
+        ], $messages);
+
+        $user->update([
+            'security_question' => $validated['security_question'],
+            'security_answer'   => $validated['security_answer'],
+        ]);
+
+        return back()->with('edit', 'Security question updated successfully.');
+    }
+    public function destroyOwnAccount(Request $request)
+    {
+        $messages = [
+            'password.required'          => 'Please enter your password.',
+            'security_answer.required'   => 'Please answer the security question.',
+            'confirmation_text.required' => 'Please type the confirmation text.',
+        ];
+
+        $validated = $request->validate([
+            'password'          => ['required'],
+            'security_answer'   => ['required'],
+            'confirmation_text' => ['required'],
+        ], $messages);
+
+        $user = User::findOrFail(Auth::id());
+
+        if ($user->role && $user->role->name === 'Admin') {
+            return back()->withErrors([
+                'account' => 'Admin account cannot be deleted.',
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Check Password
+    |--------------------------------------------------------------------------
+    */
+        if (!Hash::check(
+            $validated['password'],
+            $user->password
+        )) {
+            return back()->withErrors([
+                'password' => 'Password is incorrect.',
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Check Security Answer
+    |--------------------------------------------------------------------------
+    */
+        if (
+            strtolower(trim($validated['security_answer'])) !==
+            strtolower(trim($user->security_answer))
+        ) {
+            return back()->withErrors([
+                'security_answer' => 'Security answer is incorrect.',
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Check Confirmation Text
+    |--------------------------------------------------------------------------
+    */
+        if (
+            trim($validated['confirmation_text'])
+            !== 'DELETE MY ACCOUNT'
+        ) {
+            return back()->withErrors([
+                'confirmation_text' =>
+                'Please type DELETE MY ACCOUNT exactly.',
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Delete Avatar
+    |--------------------------------------------------------------------------
+    */
+        if (
+            $user->avatar &&
+            Storage::disk('public')->exists($user->avatar)
+        ) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Logout & Delete Account
+    |--------------------------------------------------------------------------
+    */
+        Auth::logout();
+
+        User::findOrFail($user->id)->delete();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()
+            ->route('login')
             ->with(
                 'success',
-            'All Users deleted successfully.'
+                'Your account has been deleted successfully.'
             );
     }
 }

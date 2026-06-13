@@ -127,6 +127,8 @@
 
     </main>
 
+    <div id="modalContainer"></div>
+
     <div class="tn-confirm-overlay" id="tnConfirmOverlay" aria-hidden="true">
         <div class="glass card tn-confirm-card" role="dialog" aria-modal="true" aria-labelledby="tnConfirmTitle">
 
