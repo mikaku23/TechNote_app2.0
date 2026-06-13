@@ -2,25 +2,29 @@
    TN CONFIRM MODAL
 ========================= */
 
-.tn-confirm-overlay{
-    position:fixed;
-    inset:0;
-    z-index:3000;
+/* modal blade */
+#modalContainer{
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+}
 
+/* confirm harus di atas semua modal blade */
+.tn-confirm-overlay{
+    position: fixed;
+    inset: 0;
+    z-index: 10050; /* lebih besar dari #modalContainer */
     display:flex;
     align-items:center;
     justify-content:center;
-
     padding:20px;
-
     background:rgba(15, 23, 42, .28);
     backdrop-filter:blur(10px);
     -webkit-backdrop-filter:blur(10px);
-
     opacity:0;
     visibility:hidden;
     pointer-events:none;
-
     transition:opacity .25s ease, visibility .25s ease;
 }
 

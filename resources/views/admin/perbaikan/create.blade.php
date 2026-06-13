@@ -30,14 +30,22 @@
             <div class="tn-modal-grid">
                 <div class="tn-modal-group">
                     <label>User</label>
+
                     <select name="user_id" class="tn-modal-control" required>
-                        <option value="" disabled {{ old('user_id') ? '' : 'selected' }}>Select User</option>
+                        <option value="" disabled {{ old('user_id') ? '' : 'selected' }}>
+                            Select Lecturer
+                        </option>
+
                         @foreach($users as $user)
-                        <option value="{{ $user->id }}" {{ old('user_id') == $user->id ? 'selected' : '' }}>
+                        @if($user->role && $user->role->name === 'Dosen')
+                        <option value="{{ $user->id }}"
+                            {{ old('user_id') == $user->id ? 'selected' : '' }}>
                             {{ $user->name }}
                         </option>
+                        @endif
                         @endforeach
                     </select>
+
                     @error('user_id')
                     <span class="tn-field-error">{{ $message }}</span>
                     @enderror
@@ -135,12 +143,7 @@
 
                 <button
                     type="submit"
-                    class="btn-primary"
-                    data-tn-confirm
-                    data-tn-type="success"
-                    data-tn-title="Save repair ticket?"
-                    data-tn-message="Repair ticket will be created manually by admin."
-                    data-tn-proceed-text="Save">
+                    class="btn-primary">
                     <i data-lucide="save"></i>
                     Save Repair
                 </button>

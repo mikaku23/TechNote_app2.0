@@ -144,11 +144,7 @@
                 <button
                     type="submit"
                     class="btn-primary"
-                    data-tn-confirm
-                    data-tn-type="success"
-                    data-tn-title="Save installation?"
-                    data-tn-message="The installation record and ticket will be created automatically."
-                    data-tn-proceed-text="Save">
+                   >
 
                     <i data-lucide="save"></i>
                     Save Installation

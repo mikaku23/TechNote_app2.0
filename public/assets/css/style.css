@@ -1878,3 +1878,121 @@ textarea.form-control {
     color: var(--text-light);
     pointer-events: none;
 }
+.qr-ticket-card{
+    display:flex;
+    align-items:center;
+    gap:16px;
+
+    padding:16px;
+    border-radius:16px;
+
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+}
+
+.qr-ticket-preview{
+    flex-shrink:0;
+}
+
+.qr-ticket-image{
+    width:90px;
+    height:90px;
+    display:block;
+
+    background:#fff;
+    border-radius:10px;
+    padding:6px;
+}
+
+.qr-ticket-content{
+    flex:1;
+}
+
+.qr-ticket-number{
+    font-size:18px;
+    font-weight:700;
+    margin-bottom:6px;
+}
+
+.qr-ticket-desc{
+    font-size:13px;
+    color:var(--text-light);
+    line-height:1.5;
+    margin-bottom:10px;
+}
+
+.qr-ticket-info{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+.qr-ticket-info span{
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:12px;
+
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.08);
+}
+
+/* =========================
+   GLOBAL MODAL FIX
+========================= */
+
+body {
+    font-family: "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition:
+        background 0.35s ease,
+        color 0.35s ease;
+}
+
+body.overflow-hidden {
+    overflow: hidden !important;
+}
+
+/* container modal harus menempel ke viewport */
+#modalContainer {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    display: block;
+}
+
+/* overlay modal harus selalu center di layar yang sedang terlihat */
+.tn-modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    pointer-events: auto;
+}
+
+/* card modal ikut dibatasi viewport, bukan halaman */
+.tn-modal-card {
+    position: relative;
+    width: min(700px, 95vw);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin: auto;
+    pointer-events: auto;
+}
+
+/* kalau body sempat diberi transform, ini mencegah efek aneh pada modal */
+body.modal-open,
+body.overflow-hidden {
+    transform: none !important;
+}

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class ticket extends Model
 {
@@ -11,6 +12,8 @@ class ticket extends Model
 
     protected $fillable = [
         'ticket_number',
+        'qr_token',
+        'qr_code',
         'type',
         'user_id',
         'status',
@@ -34,10 +37,20 @@ class ticket extends Model
         'scheduled_end' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function ($ticket) {
+            if (empty($ticket->qr_token)) {
+                $ticket->qr_token = (string) Str::uuid();
+            }
+        });
+    }
+
     public function perbaikans()
     {
         return $this->hasMany(perbaikan::class);
     }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -47,11 +60,11 @@ class ticket extends Model
     {
         return $this->hasOne(Penginstalan::class);
     }
+
     public function perbaikan()
     {
         return $this->hasOne(Perbaikan::class);
     }
-
 
     public function statusLogs()
     {
@@ -76,5 +89,10 @@ class ticket extends Model
     public function vercelSyncLogs()
     {
         return $this->hasMany(vercel_sync_log::class);
+    }
+
+    public function qrUrl(): string
+    {
+        return route('ticket.qr.show', ['token' => $this->qr_token]);
     }
 }

@@ -55,9 +55,10 @@
                 <div class="tn-modal-group tn-modal-full">
                     <label>Software</label>
                     <select name="software_id" class="tn-modal-control" required>
+                        <option disabled selected>Pilih Software</option>
                         @foreach($softwares as $software)
                         <option value="{{ $software->id }}">
-                            {{ $software->name }} ({{ $software->estimated_minutes }} menit)
+                            {{ $software->name }} (versi {{ $software->version }}) 
                         </option>
                         @endforeach
                     </select>
@@ -77,12 +78,7 @@
                 @if($morningAvailable || $afternoonAvailable)
                 <button
                     type="submit"
-                    class="btn-primary"
-                    data-tn-confirm
-                    data-tn-type="success"
-                    data-tn-title="Buat booking?"
-                    data-tn-message="Pastikan sesi dan software sudah benar sebelum booking dibuat."
-                    data-tn-proceed-text="Buat">
+                    class="btn-primary">
                     Buat Booking
                 </button>
                 @else

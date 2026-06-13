@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Models\Perbaikan;
 use App\Models\Rekap;
-use App\Models\ticket;
 use App\Models\ticket_status_log;
+use App\Models\ticket;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class RepairService
 {
@@ -246,6 +249,7 @@ class RepairService
 
             $ticket = ticket::create([
                 'ticket_number'    => $this->generateTicketNumber('REP'),
+                'qr_token'         => (string) Str::uuid(),
                 'type'             => 'repair',
                 'user_id'          => $data['user_id'],
                 'status'           => 'waiting',
@@ -258,6 +262,12 @@ class RepairService
                 'queue_number'     => null,
                 'scheduled_start'  => null,
                 'scheduled_end'    => null,
+            ]);
+
+            $qrPath = $this->generateTicketQr($ticket);
+
+            $ticket->update([
+                'qr_code' => $qrPath,
             ]);
 
             $perbaikan = Perbaikan::create([
@@ -487,5 +497,25 @@ class RepairService
 
             $this->syncRekapForDate($date);
         });
+    }
+    private function generateTicketQr(ticket $ticket): string
+    {
+        $path = "qrcodes/tickets/{$ticket->ticket_number}.svg";
+
+        if (!Storage::disk('public')->exists($path)) {
+            $qr = QrCode::format('svg')
+                ->size(500)
+                ->margin(2)
+                ->generate(json_encode([
+                    'ticket_number' => $ticket->ticket_number,
+                    'type'          => $ticket->type,
+                    'id'            => $ticket->id,
+                    'token'         => $ticket->qr_token,
+                ]));
+
+            Storage::disk('public')->put($path, $qr);
+        }
+
+        return $path;
     }
 }

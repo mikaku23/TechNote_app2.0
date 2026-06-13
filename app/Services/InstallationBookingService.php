@@ -10,7 +10,10 @@ use App\Models\ticket_comment;
 use App\Models\ticket_status_log;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class InstallationBookingService
 {
@@ -72,33 +75,31 @@ class InstallationBookingService
         $rekapDate = $date->toDateString();
 
         Rekap::updateOrCreate(
-            [
-                'rekap_date' => $rekapDate
-            ],
+            ['rekap_date' => $rekapDate],
             [
                 'total_installations' => ticket::whereDate('booking_date', $rekapDate)
                     ->where('type', 'installation')
+                    ->whereNull('deleted_at')
                     ->count(),
 
                 'total_repairs' => ticket::whereDate('booking_date', $rekapDate)
                     ->where('type', 'repair')
+                    ->whereNull('deleted_at')
                     ->count(),
 
                 'completed_tickets' => ticket::whereDate('booking_date', $rekapDate)
                     ->where('status', 'completed')
+                    ->whereNull('deleted_at')
                     ->count(),
 
                 'failed_tickets' => ticket::whereDate('booking_date', $rekapDate)
                     ->where('status', 'failed')
+                    ->whereNull('deleted_at')
                     ->count(),
 
                 'pending_tickets' => ticket::whereDate('booking_date', $rekapDate)
-                    ->whereIn('status', [
-                        'waiting',
-                        'processing',
-                        'diagnosis',
-                        'testing'
-                    ])
+                    ->whereIn('status', ['waiting', 'processing', 'diagnosis', 'testing'])
+                    ->whereNull('deleted_at')
                     ->count(),
             ]
         );
@@ -182,7 +183,7 @@ class InstallationBookingService
 
     public function createBooking(array $data): array
     {
-        return DB::transaction(function () use ($data) {
+        $result = DB::transaction(function () use ($data) {
             $date = Carbon::parse($data['booking_date']);
 
             $availability = $this->checkAvailability(
@@ -197,6 +198,7 @@ class InstallationBookingService
 
             $ticket = ticket::create([
                 'ticket_number'    => $this->generateTicketNumber('INS'),
+                'qr_token'         => (string) Str::uuid(),
                 'type'             => 'installation',
                 'user_id'          => $data['user_id'],
                 'status'           => 'waiting',
@@ -239,11 +241,25 @@ class InstallationBookingService
             $this->syncRekapForDate(Carbon::parse($ticket->booking_date));
 
             return [
-                'ticket'       => $ticket,
+                'ticket'       => $ticket->refresh(),
                 'penginstalan' => $penginstalan,
                 'availability' => $availability,
             ];
         });
+
+        try {
+            $qrPath = $this->generateTicketQr($result['ticket']);
+
+            $result['ticket']->forceFill([
+                'qr_code' => $qrPath,
+            ])->save();
+
+            $result['ticket']->refresh();
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $result;
     }
 
     public function updateBooking(ticket $ticket, array $data): ticket
@@ -269,9 +285,9 @@ class InstallationBookingService
             }
 
             $ticket->update([
-                'booking_date'     => $date->toDateString(),
-                'session'          => $data['session'],
-                'queue_number'     => $availability['queue_number'],
+                'booking_date'    => $date->toDateString(),
+                'session'         => $data['session'],
+                'queue_number'    => $availability['queue_number'],
                 'scheduled_start'  => $availability['next_start'],
                 'scheduled_end'    => $availability['next_start']->copy()->addMinutes($availability['software_minutes']),
                 'estimated_finish' => $availability['next_end'],
@@ -566,5 +582,26 @@ class InstallationBookingService
         $sequence = str_pad((string) ($lastId + 1), 4, '0', STR_PAD_LEFT);
 
         return "{$prefix}-{$date}-{$sequence}";
+    }
+
+    private function generateTicketQr(ticket $ticket): string
+    {
+        $path = "qrcodes/tickets/{$ticket->ticket_number}.svg";
+
+        if (! Storage::disk('public')->exists($path)) {
+            $qr = QrCode::format('svg')
+                ->size(500)
+                ->margin(2)
+                ->generate(json_encode([
+                    'ticket_number' => $ticket->ticket_number,
+                    'type'          => $ticket->type,
+                    'id'            => $ticket->id,
+                    'token'         => $ticket->qr_token,
+                ]));
+
+            Storage::disk('public')->put($path, $qr);
+        }
+
+        return $path;
     }
 }

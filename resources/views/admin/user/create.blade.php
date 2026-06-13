@@ -210,11 +210,7 @@
                 <button
                     type="submit"
                     class="btn-primary"
-                    data-tn-confirm
-                    data-tn-type="success"
-                    data-tn-title="Save user?"
-                    data-tn-message="The user information will be saved and become available in the system."
-                    data-tn-proceed-text="Save">
+                   >
 
                     <i data-lucide="save"></i>
                     Save User

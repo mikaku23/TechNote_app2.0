@@ -23,7 +23,8 @@ Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth')
     ->name('logout');
 
-
+Route::get('/ticket/qr/{token}', [TicketController::class, 'showByQr'])
+    ->name('ticket.qr.show');
 
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {

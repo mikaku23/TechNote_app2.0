@@ -44,6 +44,38 @@
                 </div>
             </div>
 
+            @if($ticket->qr_code)
+            <div class="tn-modal-group tn-modal-full">
+                <label>QR Ticket</label>
+
+                <div class="qr-ticket-card">
+
+                    <div class="qr-ticket-preview">
+                        <img
+                            src="{{ asset('storage/' . $ticket->qr_code) }}"
+                            alt="QR {{ $ticket->ticket_number }}"
+                            class="qr-ticket-image">
+                    </div>
+
+                    <div class="qr-ticket-content">
+                        <div class="qr-ticket-number">
+                            {{ $ticket->ticket_number }}
+                        </div>
+
+                        <div class="qr-ticket-desc">
+                            Tunjukkan QR ini kepada teknisi saat menyerahkan atau mengambil laptop.
+                        </div>
+
+                        <div class="qr-ticket-info">
+                            <span>Antrian #{{ $ticket->queue_number }}</span>
+                            <span>{{ ucfirst($ticket->status) }}</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            @endif
+
             <div class="tn-modal-group tn-modal-full">
                 <label>Timeline Status</label>
                 <div class="glass p-3">
@@ -75,6 +107,6 @@
             @endif
         </div>
 
-     
+
     </div>
 </div>

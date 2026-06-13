@@ -16,6 +16,12 @@ return new class extends Migration
 
             $table->string('ticket_number')->unique();
 
+            $table->uuid('qr_token')
+                ->unique();
+
+
+            $table->string('qr_code')->nullable();
+            
             $table->enum('type', [
                 'installation',
                 'repair'

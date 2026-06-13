@@ -210,14 +210,13 @@ function createRipple(event) {
 ========================== */
 
 function initializePageAnimation() {
+    // Jangan transform body, karena itu membuat fixed modal ikut "nempel" ke halaman.
     document.body.style.opacity = "0";
-    document.body.style.transform = "translateY(10px)";
 
-    setTimeout(() => {
-        document.body.style.transition = "all .5s ease";
+    requestAnimationFrame(() => {
+        document.body.style.transition = "opacity .5s ease";
         document.body.style.opacity = "1";
-        document.body.style.transform = "translateY(0)";
-    }, 50);
+    });
 }
 
 /* ==========================
@@ -664,11 +663,9 @@ function initializeRoleSearch() {
 function initializeModalLoader() {
     document.addEventListener("click", async function (e) {
         const button = e.target.closest(".open-modal");
-
         if (!button) return;
 
         const url = button.dataset.url;
-
         if (!url) return;
 
         try {
@@ -679,6 +676,8 @@ function initializeModalLoader() {
             if (!container) return;
 
             container.innerHTML = html;
+
+            document.body.classList.add("overflow-hidden", "modal-open");
 
             if (typeof lucide !== "undefined") {
                 lucide.createIcons();
@@ -694,13 +693,18 @@ function initializeModalClose() {
         const container = document.getElementById("modalContainer");
         if (!container) return;
 
-        if (e.target.classList.contains("modal-overlay")) {
+        const overlay = e.target.closest(".tn-modal-overlay");
+        const closeBtn = e.target.closest(".close-modal");
+
+        if (overlay && e.target === overlay) {
             container.innerHTML = "";
+            document.body.classList.remove("overflow-hidden", "modal-open");
+            return;
         }
 
-        const closeBtn = e.target.closest(".close-modal");
         if (closeBtn) {
             container.innerHTML = "";
+            document.body.classList.remove("overflow-hidden", "modal-open");
         }
     });
 }
@@ -729,53 +733,53 @@ function initializeGlobalConfirmModal() {
         return;
     }
 
-    function openConfirm(options = {}) {
-        const {
-            title = "Confirmation",
-            message = "Are you sure you want to continue?",
-            type = "warning",
-            proceedText = "Continue",
-            form = null,
-            callback = null,
-            showProceed = true,
-        } = options;
+function openConfirm(options = {}) {
+    const {
+        title = "Confirmation",
+        message = "Are you sure you want to continue?",
+        type = "warning",
+        proceedText = "Continue",
+        form = null,
+        callback = null,
+        showProceed = true,
+    } = options;
 
-        titleEl.textContent = title;
-        messageEl.textContent = message;
-        proceedBtn.innerHTML = `<i data-lucide="check"></i>${proceedText}`;
-        proceedBtn.style.display = showProceed ? "" : "none";
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    proceedBtn.innerHTML = `<i data-lucide="check"></i>${proceedText}`;
+    proceedBtn.style.display = showProceed ? "" : "none";
 
-        overlay.classList.add("show");
-        overlay.setAttribute("aria-hidden", "false");
-        document.body.classList.add("overflow-hidden");
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.classList.add("overflow-hidden", "modal-open");
 
-        overlay.classList.remove(
-            "tn-confirm-type-warning",
-            "tn-confirm-type-danger",
-            "tn-confirm-type-success",
-        );
-        overlay.classList.add(`tn-confirm-type-${type}`);
+    overlay.classList.remove(
+        "tn-confirm-type-warning",
+        "tn-confirm-type-danger",
+        "tn-confirm-type-success",
+    );
+    overlay.classList.add(`tn-confirm-type-${type}`);
 
-        tnConfirmForm = form;
-        tnConfirmCallback = callback || null;
+    tnConfirmForm = form;
+    tnConfirmCallback = callback || null;
 
-        if (iconWrap && iconEl) {
-            let iconName = "alert-triangle";
-            if (type === "danger") iconName = "trash-2";
-            if (type === "success") iconName = "check-circle-2";
-            iconEl.setAttribute("data-lucide", iconName);
-            lucide?.createIcons();
-        }
+    if (iconWrap && iconEl) {
+        let iconName = "alert-triangle";
+        if (type === "danger") iconName = "trash-2";
+        if (type === "success") iconName = "check-circle-2";
+        iconEl.setAttribute("data-lucide", iconName);
+        lucide?.createIcons();
     }
+}
 
-    function closeConfirm() {
-        overlay.classList.remove("show");
-        overlay.setAttribute("aria-hidden", "true");
-        document.body.classList.remove("overflow-hidden");
-        tnConfirmForm = null;
-        tnConfirmCallback = null;
-        proceedBtn.style.display = "";
-    }
+function closeConfirm() {
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("overflow-hidden", "modal-open");
+    tnConfirmForm = null;
+    tnConfirmCallback = null;
+    proceedBtn.style.display = "";
+}
 
     function proceedConfirm() {
         if (tnConfirmForm) {
@@ -867,6 +871,7 @@ function initializeGlobalConfirmModal() {
         }
     });
 }
+
 
 function initializeSearchPenginstalan() {
     const input = document.getElementById("penginstalanSearch");

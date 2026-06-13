@@ -74,29 +74,62 @@ class MahasiswaBookingController extends Controller
             ->latest()
             ->first();
 
-        $histories = ticket::with(['penginstalan.software'])
+        $weekStart = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $weekEnd = now()->endOfWeek(Carbon::SUNDAY)->endOfDay();
+
+        $weekRangeText = 'Rentang waktu ' .
+            $weekStart->translatedFormat('d') . ' - ' .
+            $weekEnd->translatedFormat('d F Y');
+
+        $weeklyTickets = ticket::with(['penginstalan.software'])
             ->where('user_id', $user->id)
             ->where('type', 'installation')
-            ->latest()
-            ->take(10)
-            ->get();
+            ->whereBetween('created_at', [$weekStart, $weekEnd])
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy(fn($item) => $item->created_at->toDateString())
+            ->map(fn($items) => $items->sortByDesc('created_at')->first());
+
+        $dayNames = [
+            1 => 'Senin',
+            2 => 'Selasa',
+            3 => 'Rabu',
+            4 => 'Kamis',
+            5 => 'Jumat',
+            6 => 'Sabtu',
+            7 => 'Minggu',
+        ];
+
+        $weekDays = collect(range(0, 6))->map(function ($offset) use ($weekStart, $weeklyTickets, $dayNames) {
+            $date = $weekStart->copy()->addDays($offset);
+
+            return [
+                'date' => $date,
+                'day' => $dayNames[$date->dayOfWeekIso],
+                'ticket' => $weeklyTickets->get($date->toDateString()),
+            ];
+        });
 
         $totalBookings = ticket::where('user_id', $user->id)
             ->where('type', 'installation')
+            ->whereBetween('created_at', [$weekStart, $weekEnd])
             ->count();
 
         $activeBookings = ticket::where('user_id', $user->id)
             ->where('type', 'installation')
+            ->whereBetween('created_at', [$weekStart, $weekEnd])
             ->whereIn('status', ['waiting', 'processing'])
             ->count();
 
         $completedBookings = ticket::where('user_id', $user->id)
             ->where('type', 'installation')
+            ->whereBetween('created_at', [$weekStart, $weekEnd])
             ->where('status', 'completed')
             ->count();
 
         $failedBookings = ticket::where('user_id', $user->id)
             ->where('type', 'installation')
+            ->whereBetween('created_at', [$weekStart, $weekEnd])
             ->where('status', 'failed')
             ->count();
 
@@ -119,7 +152,7 @@ class MahasiswaBookingController extends Controller
                 $notice = [
                     'type' => 'info',
                     'message' => 'Datang ke ruang teknisi pada jam ' . $pickupTime->format('H:i') . ' untuk menyerahkan laptop.',
-                    'expires_at' => null,
+                    'expires_at' => now()->addMinutes(5)->timestamp,
                 ];
             } elseif ($now->between($latestTicket->scheduled_start, $latestTicket->scheduled_end)) {
                 $pickupTime = $latestTicket->scheduled_end->copy();
@@ -127,7 +160,7 @@ class MahasiswaBookingController extends Controller
                 $notice = [
                     'type' => 'warning',
                     'message' => 'Datang ke ruang teknisi pada jam ' . $pickupTime->format('H:i') . ' untuk mengambil laptop.',
-                    'expires_at' => null,
+                    'expires_at' => now()->addMinutes(5)->timestamp,
                 ];
             } elseif ($now->gte($latestTicket->scheduled_end)) {
                 $notice = [
@@ -177,11 +210,18 @@ class MahasiswaBookingController extends Controller
 
         $sessionFlags = $this->getSessionAvailabilityFlags();
 
+        $todayBookingExists = ticket::where('user_id', $user->id)
+            ->where('type', 'installation')
+            ->whereDate('created_at', now()->toDateString())
+            ->whereNull('deleted_at')
+            ->exists();
+
         return view('mhs.booking.index', [
             'menu' => 'booking',
             'activeTicket' => $activeTicket,
             'latestTicket' => $latestTicket,
-            'histories' => $histories,
+            'weekDays' => $weekDays,
+            'weekRangeText' => $weekRangeText,
 
             'totalBookings' => $totalBookings,
             'activeBookings' => $activeBookings,
@@ -202,6 +242,7 @@ class MahasiswaBookingController extends Controller
 
             'notice' => $notice,
             'bookingClosedToday' => $sessionFlags['bookingClosedToday'],
+            'todayBookingExists' => $todayBookingExists,
         ]);
     }
 
@@ -316,7 +357,9 @@ class MahasiswaBookingController extends Controller
                 'note'         => $validated['note'] ?? null,
                 'changed_by'   => Auth::id(),
             ]);
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
+            report($e);
+
             return back()
                 ->withErrors(['session' => $e->getMessage()])
                 ->withInput();

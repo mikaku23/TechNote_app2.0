@@ -69,11 +69,7 @@
                 <button
                     type="submit"
                     class="btn-primary"
-                    data-tn-confirm
-                    data-tn-type="success"
-                    data-tn-title="Save role?"
-                    data-tn-message="The role information will be saved and become available in the system."
-                    data-tn-proceed-text="Save">
+                   >
 
                     <i data-lucide="save"></i>
                     Save Role   

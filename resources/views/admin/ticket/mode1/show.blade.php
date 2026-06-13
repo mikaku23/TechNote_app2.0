@@ -98,106 +98,58 @@
             </div>
 
         </div>
+        @if($ticket->qr_code)
+        <div class="glass" style="padding-bottom:400px;border-radius:24px;">
 
-        <div class="glass" style="padding:20px;border-radius:24px;margin-top:4px;">
+            <div style="text-align:center;">
 
-            <div class="tn-modal-header" style="margin-bottom:14px;">
-                <div class="tn-modal-header-left">
-                    <h3 class="tn-modal-title" style="font-size:20px;">Ticket Actions</h3>
-                    <p class="tn-modal-subtitle">
-                        Update ticket status or view activity logs.
-                    </p>
+                <h3 style="margin-bottom:6px;">
+                    Ticket QR Code
+                </h3>
+
+                <p class="tn-modal-subtitle" style="margin-bottom:18px;">
+                    Scan this QR code to verify ticket information.
+                </p>
+
+                <div class="glass"
+                    style="
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                padding:18px;
+                border-radius:24px;
+                background:rgba(255,255,255,.08);
+                backdrop-filter:blur(20px);
+            ">
+
+                    <img
+                        src="{{ asset('storage/' . $ticket->qr_code) }}"
+                        alt="QR Code"
+                        style="
+                    width:220px;
+                    height:220px;
+                    object-fit:contain;
+                    border-radius:16px;
+                ">
                 </div>
 
-                <a
-                    href="{{ route('ticket.logs.show', $ticket->id) }}"
-                    class="btn-secondary"
-                    style="text-decoration:none;">
+                <div style="margin-top:16px;">
 
-                    <i data-lucide="history"></i>
-                    Activity Logs
+                    <div class="tn-modal-control tn-modal-readonly"
+                        style="
+                    max-width:320px;
+                    margin:auto;
+                    text-align:center;
+                ">
+                        {{ $ticket->ticket_number }}
+                    </div>
 
-                </a>
-            </div>
-
-            <div class="tn-modal-grid">
-
-                <div class="tn-modal-group">
-                    <label>Status Update</label>
-                    <a
-                        href="{{ route('ticket.edit', $ticket->id) }}"
-                        class="btn-primary"
-                        style="text-decoration:none;justify-content:center;">
-
-                        <i data-lucide="pencil"></i>
-                        Update Status
-
-                    </a>
                 </div>
 
             </div>
 
         </div>
-
-        <div class="glass" style="padding:20px;border-radius:24px;margin-top:18px;">
-            <h3 style="margin-bottom:14px;">Related Installation</h3>
-
-            @if($ticket->penginstalan)
-            <div class="tn-modal-grid">
-
-                <div class="tn-modal-group">
-                    <label>Software</label>
-                    <div class="tn-modal-control tn-modal-readonly">
-                        {{ $ticket->penginstalan->software->name ?? '-' }}
-                    </div>
-                </div>
-
-                <div class="tn-modal-group">
-                    <label>Installation Result</label>
-                    <div class="tn-modal-control tn-modal-readonly">
-                        {{ $ticket->penginstalan->installation_result ?? 'Pending' }}
-                    </div>
-                </div>
-
-                <div class="tn-modal-group tn-modal-full">
-                    <label>Installation Note</label>
-                    <div class="tn-modal-control tn-modal-readonly tn-modal-description">
-                        {{ $ticket->penginstalan->note ?? 'No note available.' }}
-                    </div>
-                </div>
-
-            </div>
-            @else
-            <p style="color:var(--text-light);">No related installation data.</p>
-            @endif
-        </div>
-
-        <div class="glass" style="padding:20px;border-radius:24px;margin-top:18px;">
-            <h3 style="margin-bottom:14px;">Latest Timeline</h3>
-
-            <div style="display:flex;flex-direction:column;gap:12px;">
-                @forelse($ticket->statusLogs->take(5) as $log)
-                <div class="glass" style="padding:14px;border-radius:16px;">
-                    <strong>
-                        {{ $log->old_status ?? 'Created' }} → {{ $log->new_status }}
-                    </strong>
-                    <br>
-                    <small style="color:var(--text-light);">
-                        {{ $log->created_at->format('d M Y H:i') }}
-                        @if($log->changer)
-                        • by {{ $log->changer->name }}
-                        @endif
-                    </small>
-                    @if($log->note)
-                    <p style="margin-top:8px;">{{ $log->note }}</p>
-                    @endif
-                </div>
-                @empty
-                <p style="color:var(--text-light);">No logs available.</p>
-                @endforelse
-            </div>
-        </div>
-
+        @endif
         <div class="tn-modal-actions">
             <button type="button" class="btn-secondary close-modal">
                 <i data-lucide="x"></i>
