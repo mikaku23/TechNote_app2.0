@@ -134,7 +134,7 @@
         </div>
 
         <!-- MONITORING -->
-        <div class="nav-group {{ in_array($menu, ['login-log', 'user-activity']) ? 'active open' : '' }}">
+        <div class="nav-group {{ in_array($menu, ['login-log', 'user-activity', 'notifications']) ? 'active open' : '' }}">
 
             <button class="nav-dropdown" type="button" aria-expanded="false">
                 <div class="nav-dropdown-left">
@@ -147,7 +147,8 @@
 
             <!-- MONITORING -->
             <div class="dropdown-menu ">
-                <a href="#" class="dropdown-item" data-parent="monitoring">
+                <a href="{{ route('notifications.index') }}" 
+                class="dropdown-item {{ $menu == 'notifications' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="bell"></i>
                     <span>Notifications</span>
                 </a>

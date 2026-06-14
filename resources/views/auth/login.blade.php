@@ -305,7 +305,7 @@
                 </script>
                 @elseif($role === 'Mahasiswa')
                 <script>
-                    window.location = "{{ route('dashboard.mhs') }}";
+                    window.location = "{{ route('mahasiswa.booking.index') }}";
                 </script>
 
                 @endif

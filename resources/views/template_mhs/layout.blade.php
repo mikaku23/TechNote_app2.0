@@ -19,7 +19,7 @@
     @yield('css')
 </head>
 
-<body class="admin-panel">
+<body class="admin-panel sidebar-collapsed">
 
     <!-- Floating Background -->
     <div class="bg-gradient"></div>

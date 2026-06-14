@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Penginstalan;
 use App\Models\Rekap;
+use App\Models\Notification;
 use App\Models\Software;
 use App\Models\ticket;
 use App\Models\ticket_comment;
@@ -37,6 +38,18 @@ class InstallationBookingService
     private function makeDateTime(Carbon $date, string $time): Carbon
     {
         return Carbon::parse($date->format('Y-m-d') . ' ' . $time);
+    }
+
+    private function createSystemNotification(ticket $ticket, string $title, string $message): void
+    {
+        Notification::create([
+            'user_id'  => $ticket->user_id,
+            'ticket_id' => $ticket->id,
+            'type'     => 'system',
+            'title'    => $title,
+            'message'  => $message,
+            'is_read'  => false,
+        ]);
     }
 
     private function activeTicketsQuery(Carbon $date, string $session, ?int $ignoreTicketId = null)
@@ -237,6 +250,20 @@ class InstallationBookingService
                 'changed_by' => $data['changed_by'] ?? null,
             ]);
 
+            $this->createSystemNotification(
+                $ticket,
+                'New Installation Booking',
+                'Booking penginstalan berhasil dibuat untuk ticket ' . $ticket->ticket_number . '. Status awal: waiting.'
+            );
+
+            if (! empty($data['note'])) {
+                $this->createSystemNotification(
+                    $ticket,
+                    'Ticket Comment Added',
+                    'Catatan baru ditambahkan pada ticket ' . $ticket->ticket_number . ': ' . Str::limit($data['note'], 120)
+                );
+            }
+
             $this->syncSessionState(Carbon::parse($ticket->booking_date), $ticket->session);
             $this->syncRekapForDate(Carbon::parse($ticket->booking_date));
 
@@ -316,6 +343,20 @@ class InstallationBookingService
                 'changed_by' => $data['changed_by'] ?? null,
             ]);
 
+            $this->createSystemNotification(
+                $ticket,
+                'Installation Booking Updated',
+                'Booking penginstalan ' . $ticket->ticket_number . ' telah diperbarui.'
+            );
+
+            if (! empty($data['note'])) {
+                $this->createSystemNotification(
+                    $ticket,
+                    'Ticket Comment Added',
+                    'Catatan baru ditambahkan pada ticket ' . $ticket->ticket_number . ': ' . Str::limit($data['note'], 120)
+                );
+            }
+
             if ($oldDate->toDateString() !== $date->toDateString() || $oldSession !== $data['session']) {
                 if ($oldStart) {
                     $this->rebuildQueueFrom($oldDate, $oldSession, $oldStart, $oldQueue);
@@ -369,6 +410,12 @@ class InstallationBookingService
             $this->syncSessionState($date, $session);
             $this->syncRekapForDate($date);
 
+            $this->createSystemNotification(
+                $ticket,
+                'Ticket Cancelled',
+                'Booking penginstalan ' . $ticket->ticket_number . ' telah dibatalkan.'
+            );
+
             return $ticket;
         });
     }
@@ -411,6 +458,14 @@ class InstallationBookingService
                 $session,
                 $ticket->completed_at->copy()->addMinutes(5),
                 $queue
+            );
+
+            $this->createSystemNotification(
+                $ticket,
+                $result === 'completed' ? 'Ticket Completed' : 'Ticket Failed',
+                $result === 'completed'
+                    ? 'Ticket penginstalan ' . $ticket->ticket_number . ' telah selesai.'
+                    : 'Ticket penginstalan ' . $ticket->ticket_number . ' dinyatakan gagal.'
             );
 
             $this->syncSessionState($date, $session);
@@ -500,6 +555,12 @@ class InstallationBookingService
                         'completed_at' => $now,
                     ]);
 
+                    $this->createSystemNotification(
+                        $current,
+                        'Ticket Completed',
+                        'Ticket penginstalan ' . $current->ticket_number . ' selesai otomatis oleh sistem.'
+                    );
+
                     ticket_status_log::create([
                         'ticket_id'  => $current->id,
                         'old_status' => $oldStatus,
@@ -532,6 +593,12 @@ class InstallationBookingService
                         $current->update([
                             'status' => 'processing',
                         ]);
+
+                        $this->createSystemNotification(
+                            $current,
+                            'Ticket Processing',
+                            'Ticket penginstalan ' . $current->ticket_number . ' sedang diproses.'
+                        );
 
                         ticket_status_log::create([
                             'ticket_id'  => $current->id,

@@ -3,8 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class notification extends Model
+class Notification extends Model
 {
     protected $fillable = [
         'user_id',
@@ -18,4 +19,14 @@ class notification extends Model
     protected $casts = [
         'is_read' => 'boolean',
     ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function ticket(): BelongsTo
+    {
+        return $this->belongsTo(ticket::class)->withTrashed();
+    }
 }

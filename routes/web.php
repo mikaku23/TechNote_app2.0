@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LoginLogController;
 use App\Http\Controllers\MahasiswaBookingController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PenginstalanController;
 use App\Http\Controllers\PerbaikanController;
 use App\Http\Controllers\RekapController;
@@ -68,6 +69,11 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {
+
+    Route::resource('notifications', NotificationController::class)->only(['index', 'show']);
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
+
     Route::resource('login-log', LoginLogController::class)->only(['index', 'show']);
 
     Route::get('/dashboardAdmin', [DashboardController::class, 'admin'])->name('dashboard.admin');
@@ -128,14 +134,12 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
 
 
 Route::middleware(['auth', 'role:Mahasiswa'])->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'mahasiswa'])->name('dashboard.mhs');
-
     Route::get(
-        '/mahasiswa/penginstalan/check-availability',
+        '/dashboard/booking/check-availability',
         [MahasiswaBookingController::class, 'checkAvailability']
     )->name('mahasiswa.booking.check');
 
-    Route::resource('/mahasiswa/penginstalan', MahasiswaBookingController::class)
+    Route::resource('/dashboard', MahasiswaBookingController::class)
         ->names('mahasiswa.booking')
         ->parameters(['penginstalan' => 'ticket']);
 });

@@ -12,13 +12,9 @@
     <nav class="sidebar-nav">
 
         <!-- DASHBOARD -->
-        <a href="{{ route('dashboard.mhs') }}" class="nav-item {{ $menu == 'dashboardMhs' ? 'active' : '' }}" data-nav="dashboard">
-            <i data-lucide="layout-dashboard"></i>
-            <span class="nav-label">Dashboard</span>
-        </a>
-        <a href="{{ route('mahasiswa.booking.index') }}" class="nav-item {{ $menu == 'booking' ? 'active' : '' }}" data-nav="dashboard">
-            <i data-lucide="layout-dashboard"></i>
-            <span class="nav-label">Dashboard</span>
+        <a href="{{ route('mahasiswa.booking.index') }}" class="nav-item {{ $menu == 'booking' ? 'active' : '' }}" data-nav="booking">
+            <i data-lucide="calendar"></i>
+            <span class="nav-label">Booking</span>
         </a>
 
     </nav>

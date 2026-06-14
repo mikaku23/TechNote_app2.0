@@ -17,59 +17,6 @@
 
     <div class="navbar-right">
 
-        <div class="notification-wrapper">
-
-            <button id="notificationButton" class="icon-btn">
-                <i data-lucide="bell"></i>
-            </button>
-
-            <div class="notification-dropdown glass" id="notificationDropdown">
-
-                <div class="notification-header">
-                    <h4>Notifications</h4>
-                    <span>4 New</span>
-                </div>
-
-                <div class="notification-list">
-
-                    <div class="notification-item">
-                        <i data-lucide="ticket"></i>
-                        <div>
-                            <strong>New Ticket</strong>
-                            <p>SRV-2026-004 created</p>
-                        </div>
-                    </div>
-
-                    <div class="notification-item">
-                        <i data-lucide="check-circle"></i>
-                        <div>
-                            <strong>Ticket Completed</strong>
-                            <p>INS-2026-002 finished</p>
-                        </div>
-                    </div>
-
-                    <div class="notification-item">
-                        <i data-lucide="user-plus"></i>
-                        <div>
-                            <strong>New User</strong>
-                            <p>Mahasiswa baru terdaftar</p>
-                        </div>
-                    </div>
-
-                    <div class="notification-item">
-                        <i data-lucide="bot"></i>
-                        <div>
-                            <strong>AI Report</strong>
-                            <p>Daily summary generated</p>
-                        </div>
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
         <button id="themeToggle" class="icon-btn">
             <i data-lucide="moon"></i>
         </button>

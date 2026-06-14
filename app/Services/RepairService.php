@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Notification;
 use App\Models\Perbaikan;
 use App\Models\Rekap;
 use App\Models\ticket_status_log;
@@ -48,6 +49,18 @@ class RepairService
                     ->count(),
             ]
         );
+    }
+
+    private function createSystemNotification(ticket $ticket, string $title, string $message): void
+    {
+        Notification::create([
+            'user_id'   => $ticket->user_id,
+            'ticket_id' => $ticket->id,
+            'type'      => 'system',
+            'title'     => $title,
+            'message'   => $message,
+            'is_read'   => false,
+        ]);
     }
 
     private function generateTicketNumber(string $prefix): string
@@ -289,6 +302,18 @@ class RepairService
                 'changed_by' => $data['changed_by'] ?? null,
             ]);
 
+            $this->createSystemNotification(
+                $ticket,
+                'New Repair Ticket',
+                'Ticket perbaikan ' . $ticket->ticket_number . ' berhasil dibuat.'
+            );
+
+            $this->createSystemNotification(
+                $ticket,
+                'Ticket Status Update',
+                'Status ticket ' . $ticket->ticket_number . ' adalah waiting.'
+            );
+
             $this->syncRepairState($date);
             $this->syncRekapForDate($date);
 
@@ -354,6 +379,20 @@ class RepairService
                 'changed_by' => $data['changed_by'] ?? null,
             ]);
 
+            $this->createSystemNotification(
+                $ticket,
+                'Repair Ticket Updated',
+                'Ticket perbaikan ' . $ticket->ticket_number . ' telah diperbarui.'
+            );
+
+            if ($ticket->status === 'completed' || $ticket->status === 'failed') {
+                $this->createSystemNotification(
+                    $ticket,
+                    'Ticket Finished',
+                    'Status ticket ' . $ticket->ticket_number . ' berubah menjadi ' . $ticket->status . '.'
+                );
+            }
+
             if ($oldEnd && $newEnd && ! $oldEnd->equalTo($newEnd) && ! in_array($ticket->status, ['completed', 'failed', 'cancelled'], true)) {
                 $this->rebuildTimelineFrom(
                     $date,
@@ -399,6 +438,14 @@ class RepairService
                     : 'Repair failed manually by admin.',
                 'changed_by' => $changedBy,
             ]);
+
+            $this->createSystemNotification(
+                $ticket,
+                $result === 'completed' ? 'Repair Completed' : 'Repair Failed',
+                $result === 'completed'
+                    ? 'Ticket perbaikan ' . $ticket->ticket_number . ' telah selesai.'
+                    : 'Ticket perbaikan ' . $ticket->ticket_number . ' dinyatakan gagal.'
+            );
 
             $this->syncRekapForDate($date);
 

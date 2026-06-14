@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title')</title>
 
@@ -165,6 +166,74 @@
     </div>
 
     @yield('js')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const notificationButton = document.getElementById('notificationButton');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            const closeNotificationPanel = document.getElementById('closeNotificationPanel');
+            const unreadDot = document.querySelector('.notification-dot');
+            const notificationList = document.querySelector('.notification-list');
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const markAllReadUrl = "{{ route('notifications.readAll') }}";
+
+            if (notificationButton && notificationDropdown) {
+                notificationButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('is-open');
+                });
+            }
+
+            async function markAllAsRead() {
+                try {
+                    const response = await fetch(markAllReadUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Gagal menandai notifikasi sebagai sudah dibaca.');
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error(error);
+                    return false;
+                }
+            }
+
+            if (closeNotificationPanel && notificationDropdown) {
+                closeNotificationPanel.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+
+                    const success = await markAllAsRead();
+
+                    if (success) {
+                        notificationDropdown.classList.remove('is-open');
+
+                        window.location.reload();
+                    }
+                });
+            }
+
+            document.addEventListener('click', (e) => {
+                if (!notificationDropdown || !notificationButton) return;
+
+                const clickedInside =
+                    notificationDropdown.contains(e.target) ||
+                    notificationButton.contains(e.target);
+
+                if (!clickedInside) {
+                    notificationDropdown.classList.remove('is-open');
+                }
+            });
+        });
+    </script>
     <script src="{{ asset('assets/js/script.js') }}"></script>
 
 </body>

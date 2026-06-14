@@ -7,6 +7,8 @@ use App\Models\role;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
 
 class UserSeeder extends Seeder
 {
@@ -22,6 +24,14 @@ class UserSeeder extends Seeder
         $mahasiswaRole = role::where('name', 'Mahasiswa')->firstOrFail();
         $dosenRole = role::where('name', 'Dosen')->firstOrFail();
 
+        // Copy avatar image from assets to storage
+        $sourceImagePath = public_path('assets/images/profile.png');
+        $avatarFileName = 'avatars/users/profile.png';
+
+        if (File::exists($sourceImagePath)) {
+            Storage::disk('public')->put($avatarFileName, File::get($sourceImagePath));
+        }
+
         // Create Admin User
         User::create([
             'role_id' => $adminRole->id,
@@ -36,7 +46,7 @@ class UserSeeder extends Seeder
             'security_answer' => 'blue',
             'qr_code' => null,
             'qr_url' => null,
-            'avatar' => null,
+            'avatar' => $avatarFileName,
         ]);
 
         // Create Mahasiswa User
@@ -53,7 +63,7 @@ class UserSeeder extends Seeder
             'security_answer' => 'fluffy',
             'qr_code' => null,
             'qr_url' => null,
-            'avatar' => null,
+            'avatar' => $avatarFileName,
         ]);
 
         // Create Dosen User
@@ -70,7 +80,7 @@ class UserSeeder extends Seeder
             'security_answer' => 'jakarta',
             'qr_code' => null,
             'qr_url' => null,
-            'avatar' => null,
+            'avatar' => $avatarFileName,
         ]);
     }
 }
