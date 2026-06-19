@@ -9,6 +9,7 @@ use App\Http\Controllers\PenginstalanController;
 use App\Http\Controllers\PerbaikanController;
 use App\Http\Controllers\RekapController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SoftwareController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TrustedWebsiteController;
@@ -80,6 +81,22 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {
+
+    Route::get('/maintenance', [SettingController::class, 'maintenanceIndex'])
+        ->name('setting.maintenance.index');
+
+    Route::post('/maintenance/start', [SettingController::class, 'maintenanceStart'])
+        ->name('setting.maintenance.start');
+
+    Route::post('/maintenance/stop', [SettingController::class, 'maintenanceStop'])
+        ->name('setting.maintenance.stop');
+
+    Route::get('/sistem', [SettingController::class, 'systemIndex'])
+        ->name('setting.sistem.index');
+
+    Route::post('/sistem/toggle', [SettingController::class, 'systemToggle'])
+        ->name('setting.sistem.toggle');
+
 
     Route::resource('notifications', NotificationController::class)->only(['index', 'show']);
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');

@@ -274,6 +274,16 @@
         .login-hero-top {
             margin-top: 20px;
         }
+
+        .btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+}
     </style>
 </head>
 
@@ -409,11 +419,30 @@
 
 
 
+            @php
+            $systemModes = \Illuminate\Support\Facades\Cache::get('technote:system:modes', []);
+            $forgotPasswordEnabled = $systemModes['forgot_password'] ?? true;
+            @endphp
+
             <div class="login-footer">
                 Pastikan data identitas dan password sesuai dengan akun yang terdaftar.<br>
+
+                @if($forgotPasswordEnabled)
                 <a href="{{ route('password.forgot') }}" style="color: inherit; text-decoration: underline;">
                     Lupa password?
                 </a>
+                @else
+                <button
+                    type="button"
+                    class="btn-link"
+                    data-tn-blocked
+                    data-tn-only-cancel="true"
+                    data-tn-type="warning"
+                    data-tn-title="Fitur dinonaktifkan"
+                    data-tn-message="Mode lupa password sedang dimatikan sementara oleh admin.">
+                    Lupa password?
+                </button>
+                @endif
             </div>
         </section>
     </div>

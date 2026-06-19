@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
+use App\Models\role;
+
 
 class AuthController extends Controller
 {
@@ -76,6 +78,31 @@ class AuthController extends Controller
 
             throw ValidationException::withMessages([
                 'password' => $message,
+            ]);
+        }
+
+
+        $maintenanceActive = (bool) Cache::get('technote:maintenance:active', false);
+        $maintenanceEndsAt = (int) Cache::get('technote:maintenance:until', 0);
+
+        if ($maintenanceActive && $maintenanceEndsAt > 0 && now()->timestamp >= $maintenanceEndsAt) {
+            Cache::forget('technote:maintenance:active');
+            Cache::forget('technote:maintenance:started');
+            Cache::forget('technote:maintenance:until');
+
+            role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
+                'is_active' => true,
+            ]);
+
+            $maintenanceActive = false;
+        }
+
+        if (
+            $maintenanceActive &&
+            in_array($user->role?->name, ['Mahasiswa', 'Dosen'], true)
+        ) {
+            throw ValidationException::withMessages([
+                'identity' => 'Maaf sistem sedang maintenance, silakan coba lagi nanti.',
             ]);
         }
 
@@ -163,6 +190,21 @@ class AuthController extends Controller
 
     public function forgotPassword(Request $request)
     {
+        $modes = array_merge([
+            'forgot_password'   => true,
+            'student_booking'   => true,
+            'anti_ai_mode'      => false,
+            'otp_whatsapp'      => true,
+            'otp_email'         => true,
+            'security_question' => true,
+        ], Cache::get('technote:system:modes', []));
+
+        if (!($modes['forgot_password'] ?? true)) {
+            return redirect()
+                ->route('login')
+                ->with('warning', 'Fitur lupa password sedang dinonaktifkan sementara.');
+        }
+
         $step = $request->query('step', session('password_reset.step', 'choose'));
 
         $user = null;
@@ -170,7 +212,9 @@ class AuthController extends Controller
             $user = User::find(session('password_reset.user_id'));
         }
 
-        if ($step === 'otp' && (! $user || ! session('password_reset.channel'))) {
+        $channel = session('password_reset.channel');
+
+        if ($step === 'otp' && (! $user || ! $channel)) {
             $step = 'choose';
         }
 
@@ -178,13 +222,36 @@ class AuthController extends Controller
             $step = 'choose';
         }
 
+        if ($step === 'otp') {
+            if ($channel === 'whatsapp' && !($modes['otp_whatsapp'] ?? true)) {
+                $step = 'choose';
+                return redirect()
+                    ->route('password.forgot')
+                    ->with('warning', 'OTP WhatsApp sedang dinonaktifkan sementara.');
+            }
+
+            if ($channel === 'email' && !($modes['otp_email'] ?? true)) {
+                $step = 'choose';
+                return redirect()
+                    ->route('password.forgot')
+                    ->with('warning', 'OTP Email sedang dinonaktifkan sementara.');
+            }
+        }
+
+        if ($step === 'security' && !($modes['security_question'] ?? true)) {
+            $step = 'choose';
+            return redirect()
+                ->route('password.forgot')
+                ->with('warning', 'Pertanyaan keamanan sedang dinonaktifkan sementara.');
+        }
+
         $resendCooldownSeconds = null;
         $resendCooldownText = null;
 
-        if ($user && in_array(session('password_reset.channel'), ['whatsapp', 'email'], true)) {
+        if ($user && in_array($channel, ['whatsapp', 'email'], true)) {
             $resendCooldownSeconds = $this->getOtpResendCooldownSeconds(
                 $user->id,
-                (string) session('password_reset.channel')
+                (string) $channel
             );
 
             if ($resendCooldownSeconds !== null) {
@@ -195,9 +262,10 @@ class AuthController extends Controller
         return view('auth.forgot_password', [
             'step'                  => $step,
             'user'                  => $user,
-            'channel'               => session('password_reset.channel'),
+            'channel'               => $channel,
             'resendCooldownSeconds' => $resendCooldownSeconds,
             'resendCooldownText'    => $resendCooldownText,
+            'systemModes'           => $modes,
         ]);
     }
 

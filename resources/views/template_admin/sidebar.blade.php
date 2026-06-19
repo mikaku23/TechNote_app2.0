@@ -147,20 +147,20 @@
 
             <!-- MONITORING -->
             <div class="dropdown-menu ">
-                <a href="{{ route('notifications.index') }}" 
-                class="dropdown-item {{ $menu == 'notifications' ? 'active' : '' }}" data-parent="monitoring">
+                <a href="{{ route('notifications.index') }}"
+                    class="dropdown-item {{ $menu == 'notifications' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="bell"></i>
                     <span>Notifications</span>
                 </a>
 
-                <a href="{{ route('login-log.index') }}" 
-                class="dropdown-item {{ $menu == 'login-log' ? 'active' : '' }}" data-parent="monitoring">
+                <a href="{{ route('login-log.index') }}"
+                    class="dropdown-item {{ $menu == 'login-log' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="log-in"></i>
                     <span>Login Logs</span>
                 </a>
 
-                <a href="{{ route('user-activity.index') }}" 
-                class="dropdown-item {{ $menu == 'user-activity' ? 'active' : '' }}" data-parent="monitoring">
+                <a href="{{ route('user-activity.index') }}"
+                    class="dropdown-item {{ $menu == 'user-activity' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="history"></i>
                     <span>User Activities</span>
                 </a>
@@ -214,7 +214,7 @@
         </div>
 
         <!-- SYSTEM -->
-        <div class="nav-group" data-group="system">
+        <div class="nav-group {{ in_array($menu, ['system', 'maintenance']) ? 'active open' : '' }}" data-group="system">
 
             <button class="nav-dropdown" type="button" aria-expanded="false">
                 <div class="nav-dropdown-left">
@@ -227,12 +227,14 @@
 
             <!-- SYSTEM -->
             <div class="dropdown-menu">
-                <a href="#" class="dropdown-item" data-parent="system">
+                <a href="{{ route('setting.sistem.index') }}"
+                    class="dropdown-item {{ $menu == 'system' ? 'active' : '' }}" data-parent="system">
                     <i data-lucide="settings-2"></i>
                     <span>Settings</span>
                 </a>
 
-                <a href="#" class="dropdown-item" data-parent="system">
+                <a href="{{ route('setting.maintenance.index') }}"
+                    class="dropdown-item {{ $menu == 'maintenance' ? 'active' : '' }}    " data-parent="system">
                     <i data-lucide="shield-alert"></i>
                     <span>Maintenance</span>
                 </a>

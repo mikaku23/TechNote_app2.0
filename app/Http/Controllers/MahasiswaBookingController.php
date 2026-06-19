@@ -9,6 +9,7 @@ use App\Services\InstallationBookingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
 
 class MahasiswaBookingController extends Controller
@@ -48,6 +49,10 @@ class MahasiswaBookingController extends Controller
 
     public function index()
     {
+
+        $modes = Cache::get('technote:system:modes', []);
+        $studentBookingEnabled = $modes['student_booking'] ?? true;
+
         $this->syncTodayQueue();
 
         $user = Auth::user();
@@ -218,6 +223,8 @@ class MahasiswaBookingController extends Controller
             ->exists();
 
         return view('mhs.booking.index', [
+
+            'studentBookingEnabled' => $studentBookingEnabled,
             'menu' => 'booking',
             'activeTicket' => $activeTicket,
             'latestTicket' => $latestTicket,
@@ -249,10 +256,15 @@ class MahasiswaBookingController extends Controller
 
     public function create()
     {
+
+        $modes = Cache::get('technote:system:modes', []);
+        $studentBookingEnabled = $modes['student_booking'] ?? true;
+
         $softwares = Software::orderBy('name')->get();
         $sessionFlags = $this->getSessionAvailabilityFlags();
 
         return view('mhs.booking.create', [
+            'studentBookingEnabled' => $studentBookingEnabled,
             'menu' => 'booking',
             'softwares' => $softwares,
             'morningAvailable' => $sessionFlags['morningAvailable'],

@@ -332,6 +332,11 @@
         .login-hero-top {
             margin-top: 20px;
         }
+
+        .method-disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -446,11 +451,28 @@
                         placeholder="Masukkan identitas akun" value="{{ old('identity') }}" required>
                 </div>
 
+                @php
+                $systemModes = $systemModes ?? \Illuminate\Support\Facades\Cache::get('technote:system:modes', []);
+                @endphp
+
                 <div class="form-group">
                     <label>Metode pemulihan</label>
                     <div class="method-grid">
-                        <label class="method-card">
-                            <input type="radio" name="channel" value="whatsapp" checked>
+                        <label
+                            class="method-card {{ !($systemModes['otp_whatsapp'] ?? true) ? 'method-disabled' : '' }}"
+                            @if(!($systemModes['otp_whatsapp'] ?? true))
+                            data-tn-blocked
+                            data-tn-only-cancel="true"
+                            data-tn-type="warning"
+                            data-tn-title="OTP WhatsApp dinonaktifkan"
+                            data-tn-message="Admin sedang mematikan OTP WhatsApp sementara."
+                            @endif>
+                            <input
+                                type="radio"
+                                name="channel"
+                                value="whatsapp"
+                                {{ !($systemModes['otp_whatsapp'] ?? true) ? 'disabled' : '' }}
+                                {{ ($systemModes['otp_whatsapp'] ?? true) ? 'checked' : '' }}>
                             <div class="method-chip"><i data-lucide="message-circle"></i></div>
                             <div>
                                 <strong>WhatsApp OTP</strong>
@@ -458,8 +480,20 @@
                             </div>
                         </label>
 
-                        <label class="method-card">
-                            <input type="radio" name="channel" value="email">
+                        <label
+                            class="method-card {{ !($systemModes['otp_email'] ?? true) ? 'method-disabled' : '' }}"
+                            @if(!($systemModes['otp_email'] ?? true))
+                            data-tn-blocked
+                            data-tn-only-cancel="true"
+                            data-tn-type="warning"
+                            data-tn-title="OTP Email dinonaktifkan"
+                            data-tn-message="Admin sedang mematikan OTP Email sementara."
+                            @endif>
+                            <input
+                                type="radio"
+                                name="channel"
+                                value="email"
+                                {{ !($systemModes['otp_email'] ?? true) ? 'disabled' : '' }}>
                             <div class="method-chip"><i data-lucide="mail"></i></div>
                             <div>
                                 <strong>Email OTP</strong>
@@ -467,8 +501,20 @@
                             </div>
                         </label>
 
-                        <label class="method-card">
-                            <input type="radio" name="channel" value="security">
+                        <label
+                            class="method-card {{ !($systemModes['security_question'] ?? true) ? 'method-disabled' : '' }}"
+                            @if(!($systemModes['security_question'] ?? true))
+                            data-tn-blocked
+                            data-tn-only-cancel="true"
+                            data-tn-type="warning"
+                            data-tn-title="Pertanyaan keamanan dinonaktifkan"
+                            data-tn-message="Admin sedang mematikan reset password via pertanyaan keamanan sementara."
+                            @endif>
+                            <input
+                                type="radio"
+                                name="channel"
+                                value="security"
+                                {{ !($systemModes['security_question'] ?? true) ? 'disabled' : '' }}>
                             <div class="method-chip"><i data-lucide="shield-check"></i></div>
                             <div>
                                 <strong>Pertanyaan Keamanan</strong>

@@ -239,7 +239,22 @@
         <p>Kelola jadwal instalasi software.</p>
     </div>
 
-    @if($bookingClosedToday || $todayBookingExists)
+    @if(!$studentBookingEnabled)
+
+    <button
+        type="button"
+        class="btn-primary"
+        data-tn-blocked
+        data-tn-only-cancel="true"
+        data-tn-type="warning"
+        data-tn-title="Booking dinonaktifkan"
+        data-tn-message="Booking mahasiswa sedang dimatikan sementara oleh admin.">
+        <i data-lucide="plus"></i>
+        <span>Buat Booking</span>
+    </button>
+
+    @elseif($bookingClosedToday || $todayBookingExists)
+
     <button
         type="button"
         class="btn-primary"
@@ -247,11 +262,15 @@
         data-tn-only-cancel="true"
         data-tn-type="warning"
         data-tn-title="Booking tidak tersedia"
-        data-tn-message="{{ $todayBookingExists ? 'Hari ini kamu sudah membuat 1 booking. Silakan booking lagi besok.' : 'Sesi telah berakhir, silahkan booking besok' }}">
+        data-tn-message="{{ $todayBookingExists
+        ? 'Hari ini kamu sudah membuat 1 booking. Silakan booking lagi besok.'
+        : 'Sesi telah berakhir, silahkan booking besok' }}">
         <i data-lucide="plus"></i>
         <span>Buat Booking</span>
     </button>
+
     @else
+
     <button
         type="button"
         class="btn-primary open-modal"
@@ -259,6 +278,7 @@
         <i data-lucide="plus"></i>
         <span>Buat Booking</span>
     </button>
+
     @endif
 </div>
 
@@ -326,7 +346,7 @@
             {{ optional($activeTicket->scheduled_end)->format('H:i') }}
         </p>
 
-     
+
 
         <div class="ticket-actions">
             <button
@@ -351,7 +371,7 @@
                     Cancel Booking
                 </button>
             </form>
-            
+
             @endif
         </div>
     </div>
