@@ -118,14 +118,11 @@ class AuthController extends Controller
             'location_status'        => $locationStatus,
         ]);
 
-        user_activitie::create([
-            'user_id'     => Auth::id(),
-            'module'      => 'Authentication',
-            'activity'    => 'login',
-            'description' => 'melakukan login ke sistem.',
-            'old_data'    => null,
-            'new_data'    => null,
-        ]);
+        $this->logAuthenticationActivity(
+            Auth::id(),
+            'login',
+            'melakukan login ke sistem.'
+        );
 
         return match ($user->role?->name) {
             'Admin'     => redirect()->route('dashboard.admin'),
@@ -145,18 +142,15 @@ class AuthController extends Controller
                 ->latest('login_at')
                 ->first()
                 ?->update([
-                    'status'     => 'offline',
-                    'logout_at'  => now(),
+                    'status'    => 'offline',
+                    'logout_at' => now(),
                 ]);
 
-            user_activitie::create([
-                'user_id'     => Auth::id(),
-                'module'      => 'Authentication',
-                'activity'    => 'logout',
-                'description' => 'melakukan logout dari sistem.',
-                'old_data'    => null,
-                'new_data'    => null,
-            ]);
+            $this->logAuthenticationActivity(
+                Auth::id(),
+                'logout',
+                'melakukan logout dari sistem.'
+            );
         }
 
         Auth::logout();
@@ -207,25 +201,25 @@ class AuthController extends Controller
         ]);
     }
 
-  public function resetForgotPasswordFlow()
-{
-    $userId = session('password_reset.user_id');
-    $channel = session('password_reset.channel');
+    public function resetForgotPasswordFlow()
+    {
+        $userId = session('password_reset.user_id');
+        $channel = session('password_reset.channel');
 
-    if ($userId && in_array($channel, ['whatsapp', 'email'], true)) {
-        Cache::forget($this->otpCacheKey((int) $userId, (string) $channel));
-        Cache::forget($this->otpResendThrottleKey((int) $userId, (string) $channel));
+        if ($userId && in_array($channel, ['whatsapp', 'email'], true)) {
+            Cache::forget($this->otpCacheKey((int) $userId, (string) $channel));
+            Cache::forget($this->otpResendThrottleKey((int) $userId, (string) $channel));
+        }
+
+        session()->forget([
+            'password_reset.user_id',
+            'password_reset.channel',
+            'password_reset.step',
+            'password_reset.verified',
+        ]);
+
+        return redirect()->route('password.forgot', ['step' => 'choose']);
     }
-
-    session()->forget([
-        'password_reset.user_id',
-        'password_reset.channel',
-        'password_reset.step',
-        'password_reset.verified',
-    ]);
-
-    return redirect()->route('password.forgot', ['step' => 'choose']);
-}
 
     public function sendResetCode(Request $request)
     {
@@ -257,6 +251,12 @@ class AuthController extends Controller
         $this->startPasswordResetContext($user, $validated['channel']);
 
         if ($validated['channel'] === 'security') {
+            $this->logAuthenticationActivity(
+                $user->id,
+                'start reset password',
+                'memulai reset password melalui pertanyaan keamanan.'
+            );
+
             return redirect()
                 ->route('password.forgot', ['step' => 'security'])
                 ->with('success', 'Jawab pertanyaan keamanan untuk melanjutkan reset password.');
@@ -271,6 +271,14 @@ class AuthController extends Controller
 
         if ($sent) {
             $this->initializeOtpResendThrottle($user, $validated['channel']);
+
+            $this->logAuthenticationActivity(
+                $user->id,
+                'request otp reset password',
+                $validated['channel'] === 'whatsapp'
+                    ? 'meminta OTP reset password melalui WhatsApp.'
+                    : 'meminta OTP reset password melalui email.'
+            );
         }
 
         if (! $sent) {
@@ -324,6 +332,14 @@ class AuthController extends Controller
         }
 
         $this->registerOtpResend($user, $channel);
+
+        $this->logAuthenticationActivity(
+            $user->id,
+            'resend otp reset password',
+            $channel === 'whatsapp'
+                ? 'mengirim ulang OTP reset password melalui WhatsApp.'
+                : 'mengirim ulang OTP reset password melalui email.'
+        );
 
         $notice = $channel === 'email'
             ? 'OTP baru sudah dikirim ke email Anda. Periksa juga folder Spam/Junk.'
@@ -379,6 +395,14 @@ class AuthController extends Controller
 
         $this->markPasswordResetVerified($user);
 
+        $this->logAuthenticationActivity(
+            $user->id,
+            'verify otp reset password',
+            $channel === 'whatsapp'
+                ? 'berhasil memverifikasi OTP reset password melalui WhatsApp.'
+                : 'berhasil memverifikasi OTP reset password melalui email.'
+        );
+
         return redirect()
             ->route('password.reset.form')
             ->with('success', 'OTP valid. Silakan buat password baru.');
@@ -403,6 +427,12 @@ class AuthController extends Controller
         }
 
         $this->markPasswordResetVerified($user);
+
+        $this->logAuthenticationActivity(
+            $user->id,
+            'verify security answer',
+            'berhasil memverifikasi jawaban pertanyaan keamanan.'
+        );
 
         return redirect()
             ->route('password.reset.form')
@@ -435,7 +465,7 @@ class AuthController extends Controller
         }
 
         if (Hash::check($validated['password'], $user->password)) {
-            return back()->with('warning', 'Password baru harus berbeda dari password saat ini. Silakan gunakan password yang lain.');
+            return back()->with('warning', 'Password baru harus berbeda dari password saat ini. Silakan gunakan password yang benar-benar baru.');
         }
 
         $user->update([
@@ -453,6 +483,12 @@ class AuthController extends Controller
             'old_data'    => null,
             'new_data'    => null,
         ]);
+
+        $this->logAuthenticationActivity(
+            $user->id,
+            'update password',
+            'berhasil mengganti password melalui fitur lupa password.'
+        );
 
         $this->clearPasswordResetContext($user);
 
@@ -754,8 +790,8 @@ class AuthController extends Controller
         Cache::put(
             $this->otpResendThrottleKey($user->id, $channel),
             [
-                'resend_count'    => 0,
-                'cooldown_until'   => null,
+                'resend_count'   => 0,
+                'cooldown_until'  => null,
             ],
             now()->addDay()
         );
@@ -791,7 +827,7 @@ class AuthController extends Controller
         $key = $this->otpResendThrottleKey($user->id, $channel);
 
         $state = Cache::get($key, [
-            'resend_count'  => 0,
+            'resend_count'   => 0,
             'cooldown_until' => null,
         ]);
 
@@ -805,5 +841,21 @@ class AuthController extends Controller
         $state['cooldown_until'] = now()->addMinutes($cooldownMinutes)->timestamp;
 
         Cache::put($key, $state, now()->addDay());
+    }
+
+    private function logAuthenticationActivity(?int $userId, string $activity, string $description, mixed $oldData = null, mixed $newData = null): void
+    {
+        if (! $userId) {
+            return;
+        }
+
+        user_activitie::create([
+            'user_id'     => $userId,
+            'module'      => 'Authentication',
+            'activity'    => $activity,
+            'description' => $description,
+            'old_data'    => $oldData,
+            'new_data'    => $newData,
+        ]);
     }
 }
