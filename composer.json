@@ -10,9 +10,13 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "chillerlan/php-qrcode": "^6.0",
+        "enshrined/svg-sanitize": "^0.22.0",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
-        "simplesoftwareio/simple-qrcode": "^4.2"
+        "meyfa/php-svg": "^0.16.1",
+        "resend/resend-laravel": "^1.4",
+        "symfony/mailer": "^7.4"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

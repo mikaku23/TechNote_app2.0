@@ -9,10 +9,14 @@ use App\Models\ticket_status_log;
 use App\Models\ticket;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
+use chillerlan\QRCode\Output\QRGdImagePNG;
 
 class RepairService
 {
@@ -192,6 +196,10 @@ class RepairService
                     $end->copy()->addMinutes(5),
                     (int) ($ticket->queue_number ?? 1)
                 );
+
+                $ticket->refresh();
+                $this->sendCompletionWhatsApp($ticket, 'completed');
+                $this->sendCompletionEmail($ticket, 'completed');
 
                 $this->syncRekapForDate(Carbon::parse($ticketDate));
                 $completedCount++;
@@ -404,6 +412,13 @@ class RepairService
             $this->syncRepairState($date);
             $this->syncRekapForDate($date);
 
+            $ticket->refresh();
+
+            if (in_array($ticket->status, ['completed', 'failed'], true)) {
+                $this->sendCompletionWhatsApp($ticket, $ticket->status);
+                $this->sendCompletionEmail($ticket, $ticket->status);
+            }
+
             return $perbaikan->refresh();
         });
     }
@@ -447,6 +462,10 @@ class RepairService
                     : 'Ticket perbaikan ' . $ticket->ticket_number . ' dinyatakan gagal.'
             );
 
+            $ticket->refresh();
+            $this->sendCompletionWhatsApp($ticket, $result);
+            $this->sendCompletionEmail($ticket, $result);
+
             $this->syncRekapForDate($date);
 
             return $ticket;
@@ -464,12 +483,9 @@ class RepairService
             }
 
             $date = Carbon::parse($ticket->booking_date ?? now()->toDateString());
-            $start = $this->getRepairStart($ticket);
-            $end   = $this->getRepairEnd($ticket);
-
             $oldStatus = $ticket->status;
 
-            if (in_array($oldStatus, ['waiting', 'processing'], true) && now()->lessThan($end)) {
+            if (in_array($oldStatus, ['waiting', 'processing'], true) && now()->lessThan($this->getRepairEnd($ticket))) {
                 $ticket->update([
                     'status'       => 'failed',
                     'completed_at' => now(),
@@ -545,24 +561,245 @@ class RepairService
             $this->syncRekapForDate($date);
         });
     }
+
     private function generateTicketQr(ticket $ticket): string
     {
-        $path = "qrcodes/tickets/{$ticket->ticket_number}.svg";
+        $path = "qrcodes/tickets/{$ticket->ticket_number}.png";
 
-        if (!Storage::disk('public')->exists($path)) {
-            $qr = QrCode::format('svg')
-                ->size(500)
-                ->margin(2)
-                ->generate(json_encode([
-                    'ticket_number' => $ticket->ticket_number,
-                    'type'          => $ticket->type,
-                    'id'            => $ticket->id,
-                    'token'         => $ticket->qr_token,
-                ]));
+        if (! Storage::disk('public')->exists($path)) {
+            $payload = json_encode([
+                'ticket_number' => $ticket->ticket_number,
+                'type'          => $ticket->type,
+                'id'            => $ticket->id,
+                'token'         => $ticket->qr_token,
+            ], JSON_UNESCAPED_UNICODE);
 
-            Storage::disk('public')->put($path, $qr);
+            $options = new QROptions([
+                'outputInterface' => QRGdImagePNG::class,
+                'scale'           => 10,
+                'outputBase64'    => false,
+            ]);
+
+            $png = (new QRCode($options))->render($payload);
+
+            Storage::disk('public')->put($path, $png);
         }
 
         return $path;
+    }
+
+    private function normalizePhoneToChatId(?string $phone): ?string
+    {
+        if (! $phone) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        if (! $digits) {
+            return null;
+        }
+
+        if (str_starts_with($digits, '0')) {
+            $digits = '62' . substr($digits, 1);
+        } elseif (! str_starts_with($digits, '62')) {
+            $digits = '62' . ltrim($digits, '0');
+        }
+
+        return $digits . '@c.us';
+    }
+
+    private function formatDurationText(int $minutes): string
+    {
+        if ($minutes <= 0) {
+            return '-';
+        }
+
+        $hours = intdiv($minutes, 60);
+        $mins = $minutes % 60;
+
+        $parts = [];
+
+        if ($hours > 0) {
+            $parts[] = $hours . ' jam';
+        }
+
+        if ($mins > 0 || $hours === 0) {
+            $parts[] = $mins . ' menit';
+        }
+
+        return trim(implode(' ', $parts));
+    }
+
+    private function buildCompletionMessage(ticket $ticket, string $result): string
+    {
+        $userName = $ticket->user?->name ?? $ticket->user?->nama ?? 'Pengguna';
+
+        $itemName = $ticket->perbaikan?->item_name ?? '-';
+        $itemLocation = $ticket->perbaikan?->item_location ?? '-';
+        $damageDescription = $ticket->perbaikan?->damage_description ?? '-';
+        $repairAction = $ticket->perbaikan?->repair_action ?? '-';
+        $repairResultRaw = $ticket->perbaikan?->repair_result;
+
+        $bookingDateText = $ticket->booking_date
+            ? Carbon::parse($ticket->booking_date)->translatedFormat('d F Y')
+            : '-';
+
+        $completedAtText = $ticket->completed_at
+            ? Carbon::parse($ticket->completed_at)->translatedFormat('d F Y H:i')
+            : Carbon::now()->translatedFormat('d F Y H:i');
+
+        $durationMinutes = $this->getRepairDurationMinutes($ticket);
+        $durationText = $this->formatDurationText($durationMinutes);
+
+        $resultText = match ($repairResultRaw) {
+            'success'       => 'berhasil',
+            'failed'        => 'gagal (mengalami kendala)',
+            'unrepairable'  => 'tidak dapat diperbaiki',
+            default         => $result === 'completed' ? 'berhasil' : 'gagal (mengalami kendala)',
+        };
+
+        if ($result === 'completed') {
+            $opening = 'perbaikan Anda telah selesai dikerjakan';
+            $closing = 'Silakan datang ke ruang teknisi untuk mengambil perangkat.';
+        } else {
+            $opening = 'perbaikan Anda mengalami kendala dan dinyatakan gagal';
+            $closing = 'Silakan datang ke ruang teknisi untuk informasi lebih lanjut.';
+        }
+
+        return "Halo {$userName}, {$opening}.\n\n"
+            . "Berikut data perbaikan Anda:\n"
+            . "Nama barang: {$itemName}\n"
+            . "Lokasi barang: {$itemLocation}\n"
+            . "Kerusakan: {$damageDescription}\n"
+            . "Tindakan perbaikan: {$repairAction}\n"
+            . "Hasil perbaikan: {$resultText}\n"
+            . "Ticket Number: {$ticket->ticket_number}\n"
+            . "Tanggal Data: {$bookingDateText}\n"
+            . "Durasi Pengerjaan: {$durationText}\n"
+            . "Queue: " . ($ticket->queue_number ?? '-') . "\n\n"
+            . "{$closing}\n\n"
+            . "QR code tiket terlampir pada pesan ini.\n\n"
+            . "_{$completedAtText}_\n"
+            . "_Sent via TechNoteAPP (powered by Green.com)_";
+    }
+
+    private function sendWhatsAppFile(string $chatId, string $filePath, string $caption = ''): bool
+    {
+        $mediaUrl = rtrim(env('GREEN_API_MEDIA_URL'), '/');
+        $idInstance = env('GREEN_API_ID_INSTANCE');
+        $token = env('GREEN_API_API_TOKEN');
+
+        if (! file_exists($filePath)) {
+            return false;
+        }
+
+        $response = Http::attach(
+            'file',
+            fopen($filePath, 'r'),
+            basename($filePath)
+        )->post(
+            "{$mediaUrl}/waInstance{$idInstance}/sendFileByUpload/{$token}",
+            [
+                'chatId'  => $chatId,
+                'caption' => $caption,
+            ]
+        );
+
+        return $response->successful();
+    }
+
+    private function sendCompletionWhatsApp(ticket $ticket, string $result): void
+    {
+        if ($ticket->wa_notification_sent_at) {
+            return;
+        }
+
+        $ticket->loadMissing(['user', 'perbaikan']);
+
+        $chatId = $this->normalizePhoneToChatId($ticket->user?->no_hp);
+
+        if (! $chatId) {
+            return;
+        }
+
+        $message = $this->buildCompletionMessage($ticket, $result);
+        $qrRelativePath = $this->generateTicketQr($ticket);
+        $qrAbsolutePath = Storage::disk('public')->path($qrRelativePath);
+
+        try {
+            $sentFile = $this->sendWhatsAppFile(
+                $chatId,
+                $qrAbsolutePath,
+                $message
+            );
+
+            if ($sentFile) {
+                $ticket->forceFill([
+                    'wa_notification_sent_at' => now(),
+                ])->save();
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function sendCompletionEmail(ticket $ticket, string $result): void
+    {
+        if ($ticket->email_notification_sent_at) {
+            return;
+        }
+
+        $ticket->loadMissing(['user', 'perbaikan']);
+
+        $email = trim((string) ($ticket->user?->email ?? ''));
+
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        $subject = $result === 'completed'
+            ? 'TechNoteAPP - Perbaikan selesai: ' . $ticket->ticket_number
+            : 'TechNoteAPP - Perbaikan gagal: ' . $ticket->ticket_number;
+
+        $message = $this->buildCompletionMessage($ticket, $result);
+        $html = nl2br(e($message));
+
+        $qrRelativePath = $this->generateTicketQr($ticket);
+        $qrAbsolutePath = Storage::disk('public')->path($qrRelativePath);
+
+        try {
+            Mail::html($html, function ($mail) use ($email, $subject, $qrAbsolutePath, $ticket) {
+                $mail->to($email)
+                    ->from(config('mail.from.address'), config('mail.from.name'))
+                    ->replyTo(config('mail.from.address'), config('mail.from.name'))
+                    ->subject($subject)
+                    ->priority(3);
+
+                if (method_exists($mail, 'getSymfonyMessage')) {
+                    $symfonyMessage = $mail->getSymfonyMessage();
+                    $headers = $symfonyMessage->getHeaders();
+
+                    if (method_exists($headers, 'addTextHeader')) {
+                        $headers->addTextHeader('X-Mailer', 'TechNoteAPP');
+                        $headers->addTextHeader('X-Priority', '3');
+                        $headers->addTextHeader('Importance', 'Normal');
+                    }
+                }
+
+                if (is_file($qrAbsolutePath)) {
+                    $mail->attach($qrAbsolutePath, [
+                        'as'   => 'QR-' . $ticket->ticket_number . '.png',
+                        'mime' => 'image/png',
+                    ]);
+                }
+            });
+
+            $ticket->forceFill([
+                'email_notification_sent_at' => now(),
+            ])->save();
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }

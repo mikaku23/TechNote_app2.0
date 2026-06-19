@@ -22,7 +22,7 @@ class SoftwareSeeder extends Seeder
                 'developer' => 'Google',
                 'version' => 'Latest',
                 'description' => 'Browser modern untuk pengujian website dan akses aplikasi web.',
-                'estimated_minutes' => 15,
+                'estimated_minutes' => 2,
             ],
             [
                 'name' => 'XAMPP',

@@ -407,8 +407,13 @@
                 </button>
             </form>
 
+
+
             <div class="login-footer">
-                Pastikan data identitas dan password sesuai dengan akun yang terdaftar.
+                Pastikan data identitas dan password sesuai dengan akun yang terdaftar.<br>
+                <a href="{{ route('password.forgot') }}" style="color: inherit; text-decoration: underline;">
+                    Lupa password?
+                </a>
             </div>
         </section>
     </div>

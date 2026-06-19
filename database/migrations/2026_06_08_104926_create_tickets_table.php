@@ -16,12 +16,10 @@ return new class extends Migration
 
             $table->string('ticket_number')->unique();
 
-            $table->uuid('qr_token')
-                ->unique();
-
+            $table->uuid('qr_token')->unique();
 
             $table->string('qr_code')->nullable();
-            
+
             $table->enum('type', [
                 'installation',
                 'repair'
@@ -48,8 +46,10 @@ return new class extends Migration
             ])->default('normal');
 
             $table->timestamp('estimated_finish')->nullable();
-
             $table->timestamp('completed_at')->nullable();
+
+            $table->timestamp('wa_notification_sent_at')->nullable();
+            $table->timestamp('email_notification_sent_at')->nullable();
 
             $table->boolean('is_public')->default(true);
 

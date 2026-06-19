@@ -16,15 +16,26 @@ use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-    Route::get('/', function () {
-        return view('auth.login');
-    })->name('login');
+Route::get('/', function () {
+    return view('auth.login');
+})->name('login');
 
-    Route::post('/login', [AuthController::class, 'login'])->name('login.process');
+Route::post('/login', [AuthController::class, 'login'])->name('login.process');
 
 Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth')
     ->name('logout');
+
+
+Route::get('/forgot-password/reset', [AuthController::class, 'resetForgotPasswordFlow'])
+    ->name('password.forgot.reset');
+Route::get('/forgot-password', [AuthController::class, 'forgotPassword'])->name('password.forgot');
+Route::post('/forgot-password/send', [AuthController::class, 'sendResetCode'])->name('password.reset.send');
+Route::post('/forgot-password/resend', [AuthController::class, 'resendResetCode'])->name('password.reset.resend');
+Route::post('/forgot-password/otp/verify', [AuthController::class, 'verifyResetOtp'])->name('password.reset.otp.verify');
+Route::post('/forgot-password/security/verify', [AuthController::class, 'verifyResetSecurity'])->name('password.reset.security.verify');
+Route::get('/forgot-password/new-password', [AuthController::class, 'showResetPasswordForm'])->name('password.reset.form');
+Route::post('/forgot-password/new-password', [AuthController::class, 'updateResetPassword'])->name('password.reset.update');
 
 Route::get('/ticket/qr/{token}', [TicketController::class, 'showByQr'])
     ->name('ticket.qr.show');
@@ -141,7 +152,7 @@ Route::middleware(['auth', 'role:Mahasiswa'])->group(function () {
 
     Route::resource('/dashboard', MahasiswaBookingController::class)
         ->names('mahasiswa.booking')
-        ->parameters(['penginstalan' => 'ticket']);
+        ->parameters(['dashboard' => 'ticket']);
 });
 
 
