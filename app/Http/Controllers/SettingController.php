@@ -7,14 +7,13 @@ use App\Models\user_activitie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class SettingController extends Controller
 {
     private const MAINTENANCE_ACTIVE_KEY = 'technote:maintenance:active';
     private const MAINTENANCE_STARTED_KEY = 'technote:maintenance:started';
     private const MAINTENANCE_UNTIL_KEY   = 'technote:maintenance:until';
-
-    private const SYSTEM_MODES_KEY = 'technote:system:modes';
 
     public function maintenanceIndex()
     {
@@ -78,7 +77,7 @@ class SettingController extends Controller
     {
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
-        $modes = array_merge($this->defaultSystemModes(), Cache::get(self::SYSTEM_MODES_KEY, []));
+        $modes = $this->loadSystemModes();
 
         $items = [
             [
@@ -98,9 +97,16 @@ class SettingController extends Controller
             [
                 'key'         => 'anti_ai_mode',
                 'title'       => 'Anti AI Mode',
-                'description' => 'AI tetap bisa membaca dan menganalisis data, tetapi tidak boleh create/update/delete.',
+                'description' => 'Jika aktif, read tetap bebas tetapi seluruh CRUD diblok total.',
                 'icon'        => 'shield-ban',
                 'enabled'     => (bool) ($modes['anti_ai_mode'] ?? false),
+            ],
+            [
+                'key'         => 'ai_admin_permission',
+                'title'       => 'Permission AI Admin',
+                'description' => 'Jika aktif, CRUD butuh izin/approval. Jika nonaktif, CRUD langsung jalan tanpa pertanyaan. Anti AI Mode tetap mengalahkan semuanya.',
+                'icon'        => 'shield-check',
+                'enabled'     => (bool) ($modes['ai_admin_permission'] ?? false),
             ],
             [
                 'key'         => 'otp_whatsapp',
@@ -137,15 +143,16 @@ class SettingController extends Controller
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
         $data = $request->validate([
-            'mode'  => ['required', 'in:forgot_password,student_booking,anti_ai_mode,otp_whatsapp,otp_email,security_question'],
+            'mode'  => ['required', 'in:forgot_password,student_booking,anti_ai_mode,ai_admin_permission,otp_whatsapp,otp_email,security_question'],
             'value' => ['required', 'boolean'],
         ]);
 
-        $modes = array_merge($this->defaultSystemModes(), Cache::get(self::SYSTEM_MODES_KEY, []));
-        $old   = $modes[$data['mode']] ?? null;
+        $mode  = $data['mode'];
+        $value = (bool) $data['value'];
 
-        $modes[$data['mode']] = (bool) $data['value'];
-        Cache::forever(self::SYSTEM_MODES_KEY, $modes);
+        $old = $this->getSystemModeValue($mode);
+
+        $this->saveSystemModeValue($mode, $value);
 
         user_activitie::create([
             'user_id'     => Auth::id(),
@@ -153,27 +160,87 @@ class SettingController extends Controller
             'activity'    => 'system toggle',
             'description' => 'mengubah mode sistem.',
             'old_data'    => json_encode([
-                'mode'  => $data['mode'],
+                'mode'  => $mode,
                 'value' => $old,
             ]),
             'new_data'    => json_encode([
-                'mode'  => $data['mode'],
-                'value' => (bool) $data['value'],
+                'mode'  => $mode,
+                'value' => $value,
             ]),
         ]);
 
         return back()->with('success', 'Pengaturan sistem berhasil diperbarui.');
     }
 
+    private function loadSystemModes(): array
+    {
+        $modes = $this->defaultSystemModes();
+
+        $rows = DB::table('system_settings')
+            ->whereIn('key', array_keys($modes))
+            ->get(['key', 'value']);
+
+        foreach ($rows as $row) {
+            $modes[$row->key] = $this->castSettingValue($row->value);
+        }
+
+        return $modes;
+    }
+
+    private function getSystemModeValue(string $mode): bool
+    {
+        $row = DB::table('system_settings')
+            ->where('key', $mode)
+            ->value('value');
+
+        if ($row === null) {
+            return (bool) ($this->defaultSystemModes()[$mode] ?? false);
+        }
+
+        return $this->castSettingValue($row);
+    }
+
+    private function saveSystemModeValue(string $mode, bool $value): void
+    {
+        DB::table('system_settings')->updateOrInsert(
+            ['key' => $mode],
+            [
+                'value'      => $value ? '1' : '0',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+    }
+
+    private function castSettingValue(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        $value = mb_strtolower(trim((string) $value));
+
+        return in_array($value, ['1', 'true', 'yes', 'on', 'aktif', 'enabled'], true);
+    }
+
     private function defaultSystemModes(): array
     {
         return [
-            'forgot_password'   => true,
-            'student_booking'   => true,
-            'anti_ai_mode'      => false,
-            'otp_whatsapp'      => true,
-            'otp_email'         => true,
-            'security_question' => true,
+            'forgot_password'      => true,
+            'student_booking'      => true,
+            'anti_ai_mode'         => false,
+            'ai_admin_permission'  => false,
+            'otp_whatsapp'         => true,
+            'otp_email'            => true,
+            'security_question'    => true,
         ];
     }
 

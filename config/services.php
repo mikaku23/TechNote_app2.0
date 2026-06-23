@@ -40,4 +40,8 @@ return [
         'longitude' => env('LOGIN_ANCHOR_LNG'),
         'radius' => env('LOGIN_ALLOWED_RADIUS', 50),
     ],
+
+    'openrouter' => [
+        'api_key' => env('OPENROUTER_API_KEY'),
+    ],
 ];

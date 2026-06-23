@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminAiController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LoginLogController;
@@ -81,29 +82,26 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:Admin'])->group(function () {
+    Route::get('/admin/ai', [AdminAiController::class, 'index'])->name('admin.ai.index');
+    Route::post('/admin/ai/chat', [AdminAiController::class, 'chat'])->name('admin.ai.chat');
+    Route::post('/admin/ai/anti-mode', [AdminAiController::class, 'toggleAntiAi'])->name('admin.ai.anti-mode');
 
-    Route::get('/maintenance', [SettingController::class, 'maintenanceIndex'])
-        ->name('setting.maintenance.index');
+    Route::get('/admin/ai/log', [AdminAiController::class, 'logs'])->name('admin.ai.log');
+    Route::get('/admin/ai/tasks', [AdminAiController::class, 'tasks'])->name('admin.ai.tasks');
+    Route::get('/admin/ai/rekom', [AdminAiController::class, 'recommendations'])->name('admin.ai.rekom');
 
-    Route::post('/maintenance/start', [SettingController::class, 'maintenanceStart'])
-        ->name('setting.maintenance.start');
+    Route::get('/maintenance', [SettingController::class, 'maintenanceIndex'])->name('setting.maintenance.index');
+    Route::post('/maintenance/start', [SettingController::class, 'maintenanceStart'])->name('setting.maintenance.start');
+    Route::post('/maintenance/stop', [SettingController::class, 'maintenanceStop'])->name('setting.maintenance.stop');
 
-    Route::post('/maintenance/stop', [SettingController::class, 'maintenanceStop'])
-        ->name('setting.maintenance.stop');
-
-    Route::get('/sistem', [SettingController::class, 'systemIndex'])
-        ->name('setting.sistem.index');
-
-    Route::post('/sistem/toggle', [SettingController::class, 'systemToggle'])
-        ->name('setting.sistem.toggle');
-
+    Route::get('/sistem', [SettingController::class, 'systemIndex'])->name('setting.sistem.index');
+    Route::post('/sistem/toggle', [SettingController::class, 'systemToggle'])->name('setting.sistem.toggle');
 
     Route::resource('notifications', NotificationController::class)->only(['index', 'show']);
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
 
     Route::resource('login-log', LoginLogController::class)->only(['index', 'show']);
-
     Route::get('/dashboardAdmin', [DashboardController::class, 'admin'])->name('dashboard.admin');
 
     Route::get('/software/trash', [SoftwareController::class, 'trash'])->name('software.trash');
@@ -126,15 +124,8 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
 
     Route::resource('trusted', TrustedWebsiteController::class);
 
-    Route::patch(
-        '/penginstalan/{penginstalan}/complete',
-        [PenginstalanController::class, 'forceComplete']
-    )->name('penginstalan.complete');
-
-    Route::patch(
-        '/penginstalan/{penginstalan}/failed',
-        [PenginstalanController::class, 'forceFailed']
-    )->name('penginstalan.failed');
+    Route::patch('/penginstalan/{penginstalan}/complete', [PenginstalanController::class, 'forceComplete'])->name('penginstalan.complete');
+    Route::patch('/penginstalan/{penginstalan}/failed', [PenginstalanController::class, 'forceFailed'])->name('penginstalan.failed');
     Route::get('/penginstalan/trash', [PenginstalanController::class, 'trash'])->name('penginstalan.trash');
     Route::put('/penginstalan/{id}/restore', [PenginstalanController::class, 'restore'])->name('penginstalan.restore');
     Route::put('/penginstalan/restore-all', [PenginstalanController::class, 'restoreAll'])->name('penginstalan.restoreAll');
@@ -143,7 +134,6 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('perbaikan/trash', [PerbaikanController::class, 'trash'])->name('perbaikan.trash');
     Route::put('perbaikan/{id}/restore', [PerbaikanController::class, 'restore'])->name('perbaikan.restore');
     Route::put('perbaikan/restore-all', [PerbaikanController::class, 'restoreAll'])->name('perbaikan.restoreAll');
-
     Route::patch('perbaikan/{perbaikan}/complete', [PerbaikanController::class, 'complete'])->name('perbaikan.complete');
     Route::patch('perbaikan/{perbaikan}/failed', [PerbaikanController::class, 'failed'])->name('perbaikan.failed');
     Route::resource('perbaikan', PerbaikanController::class);
@@ -154,7 +144,6 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::resource('ticket', TicketController::class);
 
     Route::resource('rekap', RekapController::class);
-
     Route::resource('user-activity', UserActivityController::class)->only(['index', 'show']);
 });
 

@@ -1,11 +1,10 @@
 <header class="navbar glass">
-
     <div class="navbar-left">
+        <div class="logo" style="padding-top: 40px; z-index:999;">
+            <div class="logo-icon">T</div>
 
-        <button id="sidebarToggle" class="icon-btn">
-            <i data-lucide="menu"></i>
-        </button>
-
+          
+        </div>
         <div class="search-box">
             <i data-lucide="search"></i>
             <input
@@ -14,6 +13,8 @@
         </div>
 
     </div>
+
+
 
     <div class="navbar-right">
 
@@ -75,5 +76,4 @@
         </div>
         @endif
     </div>
-
 </header>

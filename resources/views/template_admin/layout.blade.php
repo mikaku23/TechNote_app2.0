@@ -95,6 +95,7 @@
 
         }
     </style>
+
     @yield('css')
 </head>
 
@@ -233,6 +234,111 @@
                 }
             });
         });
+    </script>
+
+    <script>
+        (function() {
+            const form = document.getElementById('aiForm');
+            const chatBox = document.getElementById('chatBox');
+            const textarea = document.getElementById('aiQuestion');
+            const token = form.querySelector('input[name="_token"]').value;
+
+            function escapeHtml(str) {
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function bubble(role, text, meta = '') {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'ai-bubble ' + (role === 'user' ? 'system' : 'ai');
+
+                wrapper.innerHTML = `
+            <div class="bubble-label">${role === 'user' ? 'Admin' : 'AI'}</div>
+            <div class="bubble-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
+            ${meta ? `<div class="bubble-meta">${escapeHtml(meta)}</div>` : ''}
+        `;
+
+                chatBox.appendChild(wrapper);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            function autoResize() {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.min(textarea.scrollHeight, 220) + 'px';
+            }
+
+            document.querySelectorAll('.quick').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    textarea.value = btn.dataset.q || '';
+                    autoResize();
+                    textarea.focus();
+                });
+            });
+
+            textarea.addEventListener('input', autoResize);
+
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    form.requestSubmit();
+                }
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const question = textarea.value.trim();
+                if (!question) return;
+
+                bubble('user', question);
+                textarea.value = '';
+                autoResize();
+
+                const loading = document.createElement('div');
+                loading.className = 'ai-bubble ai';
+                loading.innerHTML = `
+            <div class="bubble-label">AI</div>
+            <div class="bubble-text">Sedang berpikir...</div>
+        `;
+                chatBox.appendChild(loading);
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                try {
+                    const res = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': token,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        },
+                        body: new URLSearchParams({
+                            question: question
+                        })
+                    });
+
+                    const data = await res.json();
+
+                    loading.remove();
+
+                    const meta = [
+                        data.source ? `source: ${data.source}` : '',
+                        data.action ? `action: ${data.action}` : '',
+                        typeof data.confidence !== 'undefined' ? `confidence: ${data.confidence}` : '',
+                        data.blocked ? 'blocked by anti-ai mode' : '',
+                    ].filter(Boolean).join(' · ');
+
+                    bubble('ai', data.reply ?? 'Tidak ada jawaban.', meta);
+                } catch (err) {
+                    loading.remove();
+                    bubble('ai', 'Terjadi error saat menghubungi AI.');
+                }
+            });
+        })();
     </script>
     <script src="{{ asset('assets/js/script.js') }}"></script>
 

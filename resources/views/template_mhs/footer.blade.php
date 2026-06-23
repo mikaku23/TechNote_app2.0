@@ -1,11 +1,11 @@
-<footer class="footer glass">
+   <footer class="footer glass">
 
-    <p>
-        © 2026 TechNote 2.0
-    </p>
+       <p>
+           © 2026 TechNote 2.0
+       </p>
 
-    <span>
-        Built for Muhammad Haliq Maulana
-    </span>
+       <span>
+           Built for Muhammad Haliq Maulana
+       </span>
 
-</footer>
+   </footer>

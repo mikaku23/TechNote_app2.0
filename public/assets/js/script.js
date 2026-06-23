@@ -195,9 +195,18 @@ function createRipple(event) {
     const rect = button.getBoundingClientRect();
     const size = Math.max(rect.width, rect.height);
 
+    const clientX =
+        typeof event.clientX === "number"
+            ? event.clientX
+            : rect.left + rect.width / 2;
+    const clientY =
+        typeof event.clientY === "number"
+            ? event.clientY
+            : rect.top + rect.height / 2;
+
     ripple.style.width = ripple.style.height = `${size}px`;
-    ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
-    ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
+    ripple.style.left = `${clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${clientY - rect.top - size / 2}px`;
     ripple.classList.add("ripple");
 
     button.appendChild(ripple);
@@ -232,11 +241,20 @@ function initializeCards() {
         return;
     }
 
+    const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (reduceMotion) return;
+
     const cards = document.querySelectorAll(".motion-card");
 
     cards.forEach((card) => {
-        card.addEventListener("mousemove", handleCardMove, { passive: true });
-        card.addEventListener("mouseleave", resetCard);
+        card.addEventListener("pointermove", handleCardMove, { passive: true });
+        card.addEventListener("pointerleave", resetCard);
+        card.addEventListener("pointerenter", () => {
+            card.classList.add("liquid");
+        });
     });
 }
 
@@ -256,14 +274,14 @@ function handleCardMove(event) {
 
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
-        const rotateX = ((y - centerY) / centerY) * -4;
-        const rotateY = ((x - centerX) / centerX) * 4;
+        const rotateX = ((y - centerY) / centerY) * -3;
+        const rotateY = ((x - centerX) / centerX) * 3;
 
         card.style.transform = `
-            perspective(1000px)
+            perspective(1200px)
             rotateX(${rotateX}deg)
             rotateY(${rotateY}deg)
-            translateY(-4px)
+            translate3d(0, -5px, 0)
         `;
     });
 
@@ -273,12 +291,16 @@ function handleCardMove(event) {
 function resetCard(event) {
     const card = event.currentTarget;
 
+    const prevFrame = cardRafMap.get(card);
+    if (prevFrame) cancelAnimationFrame(prevFrame);
+    cardRafMap.delete(card);
+
     card.classList.remove("liquid");
     card.style.transform = `
-        perspective(1000px)
+        perspective(1200px)
         rotateX(0deg)
         rotateY(0deg)
-        translateY(0px)
+        translate3d(0, 0, 0)
     `;
 }
 
@@ -735,53 +757,53 @@ function initializeGlobalConfirmModal() {
         return;
     }
 
-function openConfirm(options = {}) {
-    const {
-        title = "Confirmation",
-        message = "Are you sure you want to continue?",
-        type = "warning",
-        proceedText = "Continue",
-        form = null,
-        callback = null,
-        showProceed = true,
-    } = options;
+    function openConfirm(options = {}) {
+        const {
+            title = "Confirmation",
+            message = "Are you sure you want to continue?",
+            type = "warning",
+            proceedText = "Continue",
+            form = null,
+            callback = null,
+            showProceed = true,
+        } = options;
 
-    titleEl.textContent = title;
-    messageEl.textContent = message;
-    proceedBtn.innerHTML = `<i data-lucide="check"></i>${proceedText}`;
-    proceedBtn.style.display = showProceed ? "" : "none";
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        proceedBtn.innerHTML = `<i data-lucide="check"></i>${proceedText}`;
+        proceedBtn.style.display = showProceed ? "" : "none";
 
-    overlay.classList.add("show");
-    overlay.setAttribute("aria-hidden", "false");
-    document.body.classList.add("overflow-hidden", "modal-open");
+        overlay.classList.add("show");
+        overlay.setAttribute("aria-hidden", "false");
+        document.body.classList.add("overflow-hidden", "modal-open");
 
-    overlay.classList.remove(
-        "tn-confirm-type-warning",
-        "tn-confirm-type-danger",
-        "tn-confirm-type-success",
-    );
-    overlay.classList.add(`tn-confirm-type-${type}`);
+        overlay.classList.remove(
+            "tn-confirm-type-warning",
+            "tn-confirm-type-danger",
+            "tn-confirm-type-success",
+        );
+        overlay.classList.add(`tn-confirm-type-${type}`);
 
-    tnConfirmForm = form;
-    tnConfirmCallback = callback || null;
+        tnConfirmForm = form;
+        tnConfirmCallback = callback || null;
 
-    if (iconWrap && iconEl) {
-        let iconName = "alert-triangle";
-        if (type === "danger") iconName = "trash-2";
-        if (type === "success") iconName = "check-circle-2";
-        iconEl.setAttribute("data-lucide", iconName);
-        lucide?.createIcons();
+        if (iconWrap && iconEl) {
+            let iconName = "alert-triangle";
+            if (type === "danger") iconName = "trash-2";
+            if (type === "success") iconName = "check-circle-2";
+            iconEl.setAttribute("data-lucide", iconName);
+            lucide?.createIcons();
+        }
     }
-}
 
-function closeConfirm() {
-    overlay.classList.remove("show");
-    overlay.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("overflow-hidden", "modal-open");
-    tnConfirmForm = null;
-    tnConfirmCallback = null;
-    proceedBtn.style.display = "";
-}
+    function closeConfirm() {
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("overflow-hidden", "modal-open");
+        tnConfirmForm = null;
+        tnConfirmCallback = null;
+        proceedBtn.style.display = "";
+    }
 
     function proceedConfirm() {
         if (tnConfirmForm) {
@@ -873,7 +895,6 @@ function closeConfirm() {
         }
     });
 }
-
 
 function initializeSearchPenginstalan() {
     const input = document.getElementById("penginstalanSearch");
@@ -1006,7 +1027,9 @@ function initializeSearchTicketLog() {
     let searchFrame = 0;
 
     const filterRows = (keyword) => {
-        const rows = Array.from(document.querySelectorAll("tbody tr.ticket-log-row"));
+        const rows = Array.from(
+            document.querySelectorAll("tbody tr.ticket-log-row"),
+        );
         let visibleCount = 0;
 
         rows.forEach((row) => {
@@ -1058,4 +1081,178 @@ function initializeSearchTicket() {
             });
         });
     });
+}
+
+/* ==========================
+   TECHNOTE 2.0 BUTTON LIQUID GLASS UPGRADE
+========================== */
+
+function initializeButtons() {
+    const buttons = document.querySelectorAll(
+        ".btn-primary, .btn-secondary, .icon-btn",
+    );
+
+    ensureTechnoteGlassFilter();
+
+    buttons.forEach((button) => {
+        prepareTechnoteButton(button);
+    });
+}
+
+function ensureTechnoteGlassFilter() {
+    if (document.getElementById("container-glass")) return;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    svg.setAttribute(
+        "style",
+        "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;",
+    );
+
+    svg.innerHTML = `
+        <defs>
+            <filter
+                id="container-glass"
+                x="0%"
+                y="0%"
+                width="100%"
+                height="100%"
+                colorInterpolationFilters="sRGB"
+            >
+                <feTurbulence
+                    type="fractalNoise"
+                    baseFrequency="0.05 0.05"
+                    numOctaves="1"
+                    seed="1"
+                    result="turbulence"
+                />
+                <feGaussianBlur in="turbulence" stdDeviation="2" result="blurredNoise" />
+                <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="blurredNoise"
+                    scale="70"
+                    xChannelSelector="R"
+                    yChannelSelector="B"
+                    result="displaced"
+                />
+                <feGaussianBlur in="displaced" stdDeviation="4" result="finalBlur" />
+                <feComposite in="finalBlur" in2="finalBlur" operator="over" />
+            </filter>
+        </defs>
+    `;
+
+    document.body.appendChild(svg);
+}
+
+function prepareTechnoteButton(button) {
+    if (!button || button.dataset.tnLiquidReady === "1") return;
+    button.dataset.tnLiquidReady = "1";
+
+    button.classList.add("button-liquid-base");
+    button.style.setProperty("--btn-x", "50%");
+    button.style.setProperty("--btn-y", "35%");
+
+    if (!button.querySelector(".tn-liquid-surface")) {
+        const surface = document.createElement("span");
+        surface.className = "tn-liquid-surface";
+        surface.setAttribute("aria-hidden", "true");
+        button.prepend(surface);
+    }
+
+    const handlePointerMove = (event) => {
+        const rect = button.getBoundingClientRect();
+        const x =
+            typeof event.clientX === "number"
+                ? event.clientX - rect.left
+                : rect.width / 2;
+        const y =
+            typeof event.clientY === "number"
+                ? event.clientY - rect.top
+                : rect.height / 2;
+
+        button.style.setProperty(
+            "--btn-x",
+            `${Math.max(0, Math.min(rect.width, x))}px`,
+        );
+        button.style.setProperty(
+            "--btn-y",
+            `${Math.max(0, Math.min(rect.height, y))}px`,
+        );
+    };
+
+    const activateButton = () => {
+        button.classList.add("button-liquid-hover");
+    };
+
+    const deactivateButton = () => {
+        button.classList.remove("button-liquid-hover", "button-liquid-pressed");
+        button.style.setProperty("--btn-x", "50%");
+        button.style.setProperty("--btn-y", "35%");
+    };
+
+    button.addEventListener("pointerenter", activateButton);
+    button.addEventListener("pointerleave", deactivateButton);
+    button.addEventListener("pointercancel", deactivateButton);
+    button.addEventListener("blur", deactivateButton);
+    button.addEventListener("pointermove", handlePointerMove, {
+        passive: true,
+    });
+
+    button.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+
+        button.classList.add("button-liquid-pressed");
+        handlePointerMove(event);
+        createRipple(button, event);
+    });
+
+    button.addEventListener("pointerup", () => {
+        button.classList.remove("button-liquid-pressed");
+    });
+
+    button.addEventListener("click", (event) => {
+        if (event.detail === 0) {
+            createRipple(button, event);
+        }
+    });
+
+    button.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            button.classList.add("button-liquid-pressed");
+            createRipple(button, event);
+            window.setTimeout(() => {
+                button.classList.remove("button-liquid-pressed");
+            }, 120);
+        }
+    });
+}
+
+function createRipple(button, event) {
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const ripple = document.createElement("span");
+    ripple.className = "tn-button-ripple";
+
+    const clientX =
+        typeof event?.clientX === "number"
+            ? event.clientX
+            : rect.left + rect.width / 2;
+    const clientY =
+        typeof event?.clientY === "number"
+            ? event.clientY
+            : rect.top + rect.height / 2;
+
+    const size = Math.max(rect.width, rect.height);
+
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${clientY - rect.top - size / 2}px`;
+
+    button.appendChild(ripple);
+
+    window.setTimeout(() => {
+        ripple.remove();
+    }, 640);
 }

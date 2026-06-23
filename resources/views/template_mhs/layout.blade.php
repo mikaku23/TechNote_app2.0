@@ -19,7 +19,7 @@
     @yield('css')
 </head>
 
-<body class="admin-panel sidebar-collapsed">
+<body class="student-panel">
 
     <!-- Floating Background -->
     <div class="bg-gradient"></div>
@@ -28,14 +28,14 @@
     <div class="blob blob-3"></div>
 
     <!-- Sidebar -->
-    @include('template_mhs.sidebar')
+
 
 
     <!-- Main -->
     <main class="main">
 
         <!-- Navbar -->
-        @include('template_mhs.nav')
+    @include('template_mhs.nav')
 
         <!-- Dashboard -->
         <section class="dashboard">
@@ -44,7 +44,7 @@
         </section>
 
         <!-- Footer -->
-        @include('template_mhs.footer')
+    @include('template_mhs.footer')
 
 
     </main>
