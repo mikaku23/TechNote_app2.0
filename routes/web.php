@@ -84,6 +84,7 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/admin/ai', [AdminAiController::class, 'index'])->name('admin.ai.index');
     Route::post('/admin/ai/chat', [AdminAiController::class, 'chat'])->name('admin.ai.chat');
+    Route::get('/chat-status/{jobId}', [AdminAiController::class, 'chatStatus'])->name('admin.ai.chat.status');
     Route::post('/admin/ai/anti-mode', [AdminAiController::class, 'toggleAntiAi'])->name('admin.ai.anti-mode');
 
     Route::get('/admin/ai/log', [AdminAiController::class, 'logs'])->name('admin.ai.log');

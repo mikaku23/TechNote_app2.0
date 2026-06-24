@@ -2,31 +2,31 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Role;
 use App\Models\user_activitie;
+use App\Services\SystemControlService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 class SettingController extends Controller
 {
-    private const MAINTENANCE_ACTIVE_KEY = 'technote:maintenance:active';
-    private const MAINTENANCE_STARTED_KEY = 'technote:maintenance:started';
-    private const MAINTENANCE_UNTIL_KEY   = 'technote:maintenance:until';
+    public function __construct(
+        protected SystemControlService $systemControlService
+    ) {}
 
     public function maintenanceIndex()
     {
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
-        $this->syncMaintenanceState();
+        $state = $this->systemControlService->syncMaintenanceState();
 
         return view('admin.setting.maintenance.index', [
             'menu'      => 'maintenance',
             'title'     => 'Maintenance Mode',
-            'isActive'  => (bool) Cache::get(self::MAINTENANCE_ACTIVE_KEY, false),
-            'startedAt' => Cache::get(self::MAINTENANCE_STARTED_KEY),
-            'endsAt'    => Cache::get(self::MAINTENANCE_UNTIL_KEY),
+            'isActive'   => (bool) ($state['active'] ?? false),
+            'startedAt'  => $state['started_at'] ?? null,
+            'endsAt'     => $state['ends_at'] ?? null,
+            'scope'      => $state['scope'] ?? ['type' => 'global', 'value' => null],
+            'lockRoles'  => false,
         ]);
     }
 
@@ -35,10 +35,23 @@ class SettingController extends Controller
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
         $data = $request->validate([
-            'minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'minutes'     => ['nullable', 'integer', 'min:1', 'max:1440'],
+            'scope_type'  => ['nullable', 'in:global,role,user_name,user_id'],
+            'scope_value' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $this->activateMaintenance((int) $data['minutes']);
+        $minutes = (int) ($data['minutes'] ?? 30);
+        $scopeType = $data['scope_type'] ?? 'global';
+        $scopeValue = $data['scope_value'] ?? null;
+
+        if ($scopeType === 'user_id' && $scopeValue !== null) {
+            $scopeValue = (int) $scopeValue;
+        }
+
+        $state = $this->systemControlService->startMaintenance($minutes, [
+            'type'  => $scopeType,
+            'value' => $scopeValue,
+        ]);
 
         user_activitie::create([
             'user_id'     => Auth::id(),
@@ -47,8 +60,8 @@ class SettingController extends Controller
             'description' => 'mengaktifkan maintenance mode.',
             'old_data'    => null,
             'new_data'    => json_encode([
-                'minutes' => (int) $data['minutes'],
-                'ends_at'  => Cache::get(self::MAINTENANCE_UNTIL_KEY),
+                'minutes' => $minutes,
+                'state'   => $state,
             ]),
         ]);
 
@@ -59,7 +72,7 @@ class SettingController extends Controller
     {
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
-        $this->deactivateMaintenance();
+        $this->systemControlService->stopMaintenance();
 
         user_activitie::create([
             'user_id'     => Auth::id(),
@@ -77,64 +90,35 @@ class SettingController extends Controller
     {
         abort_unless(Auth::check() && Auth::user()->role?->name === 'Admin', 403);
 
-        $modes = $this->loadSystemModes();
+        $items = collect($this->systemControlService->getSystemSettingFeatures())
+            ->map(function (array $item) {
+                return [
+                    'key'         => $item['key'],
+                    'title'       => $item['title'],
+                    'description' => $item['description'],
+                    'icon'        => match ($item['key']) {
+                        'forgot_password' => 'key-round',
+                        'student_booking' => 'calendar-x-2',
+                        'anti_ai_mode' => 'shield-ban',
+                        'ai_admin_permission' => 'shield-check',
+                        'otp_whatsapp' => 'message-circle-more',
+                        'otp_email' => 'mail',
+                        'security_question' => 'shield-question',
+                        default => 'settings',
+                    },
+                    'enabled'     => (bool) ($item['enabled'] ?? false),
+                    'status_text'  => (bool) ($item['enabled'] ?? false) ? 'aktif' : 'nonaktif',
+                ];
+            })
+            ->all();
 
-        $items = [
-            [
-                'key'         => 'forgot_password',
-                'title'       => 'Mode Lupa Password',
-                'description' => 'Menonaktifkan menu lupa password di login sementara waktu.',
-                'icon'        => 'key-round',
-                'enabled'     => (bool) ($modes['forgot_password'] ?? true),
-            ],
-            [
-                'key'         => 'student_booking',
-                'title'       => 'Mode Booking Mahasiswa',
-                'description' => 'Seluruh mahasiswa tidak bisa membuat booking penginstalan sementara.',
-                'icon'        => 'calendar-x-2',
-                'enabled'     => (bool) ($modes['student_booking'] ?? true),
-            ],
-            [
-                'key'         => 'anti_ai_mode',
-                'title'       => 'Anti AI Mode',
-                'description' => 'Jika aktif, read tetap bebas tetapi seluruh CRUD diblok total.',
-                'icon'        => 'shield-ban',
-                'enabled'     => (bool) ($modes['anti_ai_mode'] ?? false),
-            ],
-            [
-                'key'         => 'ai_admin_permission',
-                'title'       => 'Permission AI Admin',
-                'description' => 'Jika aktif, CRUD butuh izin/approval. Jika nonaktif, CRUD langsung jalan tanpa pertanyaan. Anti AI Mode tetap mengalahkan semuanya.',
-                'icon'        => 'shield-check',
-                'enabled'     => (bool) ($modes['ai_admin_permission'] ?? false),
-            ],
-            [
-                'key'         => 'otp_whatsapp',
-                'title'       => 'Mode OTP WhatsApp',
-                'description' => 'Menonaktifkan pengiriman OTP WhatsApp sementara untuk testing atau keadaan darurat.',
-                'icon'        => 'message-circle-more',
-                'enabled'     => (bool) ($modes['otp_whatsapp'] ?? true),
-            ],
-            [
-                'key'         => 'otp_email',
-                'title'       => 'Mode OTP Email',
-                'description' => 'Menonaktifkan pengiriman OTP via email sementara.',
-                'icon'        => 'mail',
-                'enabled'     => (bool) ($modes['otp_email'] ?? true),
-            ],
-            [
-                'key'         => 'security_question',
-                'title'       => 'Mode Pertanyaan Keamanan',
-                'description' => 'Menonaktifkan reset password via pertanyaan keamanan sementara.',
-                'icon'        => 'shield-question',
-                'enabled'     => (bool) ($modes['security_question'] ?? true),
-            ],
-        ];
+        $state = $this->systemControlService->syncMaintenanceState();
 
         return view('admin.setting.sistem.index', [
             'menu'  => 'system',
             'title' => 'System Settings',
             'items' => $items,
+            'maintenanceState' => $state,
         ]);
     }
 
@@ -150,9 +134,9 @@ class SettingController extends Controller
         $mode  = $data['mode'];
         $value = (bool) $data['value'];
 
-        $old = $this->getSystemModeValue($mode);
+        $old = $this->systemControlService->getMode($mode);
 
-        $this->saveSystemModeValue($mode, $value);
+        $this->systemControlService->setMode($mode, $value);
 
         user_activitie::create([
             'user_id'     => Auth::id(),
@@ -170,123 +154,5 @@ class SettingController extends Controller
         ]);
 
         return back()->with('success', 'Pengaturan sistem berhasil diperbarui.');
-    }
-
-    private function loadSystemModes(): array
-    {
-        $modes = $this->defaultSystemModes();
-
-        $rows = DB::table('system_settings')
-            ->whereIn('key', array_keys($modes))
-            ->get(['key', 'value']);
-
-        foreach ($rows as $row) {
-            $modes[$row->key] = $this->castSettingValue($row->value);
-        }
-
-        return $modes;
-    }
-
-    private function getSystemModeValue(string $mode): bool
-    {
-        $row = DB::table('system_settings')
-            ->where('key', $mode)
-            ->value('value');
-
-        if ($row === null) {
-            return (bool) ($this->defaultSystemModes()[$mode] ?? false);
-        }
-
-        return $this->castSettingValue($row);
-    }
-
-    private function saveSystemModeValue(string $mode, bool $value): void
-    {
-        DB::table('system_settings')->updateOrInsert(
-            ['key' => $mode],
-            [
-                'value'      => $value ? '1' : '0',
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-    }
-
-    private function castSettingValue(mixed $value): bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if ($value === null) {
-            return false;
-        }
-
-        if (is_numeric($value)) {
-            return (int) $value === 1;
-        }
-
-        $value = mb_strtolower(trim((string) $value));
-
-        return in_array($value, ['1', 'true', 'yes', 'on', 'aktif', 'enabled'], true);
-    }
-
-    private function defaultSystemModes(): array
-    {
-        return [
-            'forgot_password'      => true,
-            'student_booking'      => true,
-            'anti_ai_mode'         => false,
-            'ai_admin_permission'  => false,
-            'otp_whatsapp'         => true,
-            'otp_email'            => true,
-            'security_question'    => true,
-        ];
-    }
-
-    private function activateMaintenance(int $minutes): void
-    {
-        $endsAt = now()->addMinutes($minutes)->timestamp;
-
-        Cache::forever(self::MAINTENANCE_ACTIVE_KEY, true);
-        Cache::forever(self::MAINTENANCE_STARTED_KEY, now()->timestamp);
-        Cache::forever(self::MAINTENANCE_UNTIL_KEY, $endsAt);
-
-        Role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
-            'is_active' => false,
-        ]);
-    }
-
-    private function deactivateMaintenance(): void
-    {
-        Cache::forget(self::MAINTENANCE_ACTIVE_KEY);
-        Cache::forget(self::MAINTENANCE_STARTED_KEY);
-        Cache::forget(self::MAINTENANCE_UNTIL_KEY);
-
-        Role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
-            'is_active' => true,
-        ]);
-    }
-
-    private function syncMaintenanceState(): void
-    {
-        $isActive = (bool) Cache::get(self::MAINTENANCE_ACTIVE_KEY, false);
-        $endsAt   = (int) Cache::get(self::MAINTENANCE_UNTIL_KEY, 0);
-
-        if (! $isActive) {
-            Role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
-                'is_active' => true,
-            ]);
-            return;
-        }
-
-        if ($endsAt > 0 && now()->timestamp >= $endsAt) {
-            $this->deactivateMaintenance();
-            return;
-        }
-
-        Role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
-            'is_active' => false,
-        ]);
     }
 }

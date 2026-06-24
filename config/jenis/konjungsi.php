@@ -1,9 +1,2 @@
 <?php
-return [
-    'karena',
-    'sebab',
-    'akibat',
-    'sehingga',
-    'mengapa',
-    'kenapa'
-];
+return ['karena','sebab','akibat','sehingga','mengapa','kenapa','jadi','maka'];

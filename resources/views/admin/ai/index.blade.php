@@ -4,8 +4,6 @@
 
 @section('css')
 <style>
-  
-
     .ai-page {
         height: calc(100vh - 24px);
         padding: 24px;
@@ -565,7 +563,7 @@
                             name="question"
                             id="aiQuestion"
                             rows="1"
-                            placeholder="Ask zapa a question..."
+                            placeholder="Ask TechAI..."
                             class="ai-textarea"></textarea>
 
                         <div class="ai-send-row">
@@ -592,23 +590,28 @@
 <script>
     (function() {
         const form = document.getElementById('aiForm');
-        const textarea = document.getElementById('aiQuestion');
         const chatBox = document.getElementById('chatBox');
+        const textarea = document.getElementById('aiQuestion');
         const token = form.querySelector('input[name="_token"]').value;
         const sendBtn = document.getElementById('sendBtn');
         const sendBtnText = document.getElementById('sendBtnText');
 
-        let isSubmitting = false;
         let activeRunId = 0;
+        let isSubmitting = false;
+
         let thinkingBubble = null;
-        let loadingBubble = null;
-        let processTimer = [];
-        let processState = {
-            1: null,
-            2: null,
-            3: null,
-            4: null,
-        };
+        let thinkingStatusText = null;
+        let thinkingSteps = {};
+        let stageTimers = [];
+        let elapsedTimer = null;
+        let queryStartedAt = 0;
+        let stage2StartedAt = 0;
+        let stage3StartedAt = 0;
+
+        const MIN_STAGE_1 = 350; // cepat, tapi sempat terlihat
+        const MIN_STAGE_2 = 700; // paling lama
+        const MIN_STAGE_3 = 700; // agak lama juga
+        const MIN_STAGE_4 = 350; // cepat
 
         function escapeHtml(str) {
             return String(str)
@@ -619,120 +622,93 @@
                 .replace(/'/g, '&#039;');
         }
 
-        function scrollChatToBottom() {
+        function scrollBottom() {
             requestAnimationFrame(() => {
                 chatBox.scrollTop = chatBox.scrollHeight;
             });
         }
 
         function addBubble(role, text, meta = '') {
-            const wrap = document.createElement('div');
-            wrap.className = 'bubble ' + (role === 'user' ? 'user' : 'ai');
+            const el = document.createElement('div');
+            el.className = 'bubble ' + (role === 'user' ? 'user' : 'ai');
 
-            wrap.innerHTML = `
-            <div class="bubble-label">${role === 'user' ? 'Admin' : 'AI'}</div>
-            <div class="bubble-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
-            ${meta ? `<div class="bubble-meta">${escapeHtml(meta)}</div>` : ''}
-        `;
+            el.innerHTML = `
+                <div class="bubble-label">${role === 'user' ? 'Admin' : 'AI'}</div>
+                <div class="bubble-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
+                ${meta ? `<div class="bubble-meta">${escapeHtml(meta)}</div>` : ''}
+            `;
 
-            chatBox.appendChild(wrap);
-            scrollChatToBottom();
+            chatBox.appendChild(el);
+            scrollBottom();
         }
 
-        function createThinkingBubble() {
-            const wrap = document.createElement('div');
-            wrap.className = 'bubble ai thinking';
-            wrap.id = 'thinkingBubble';
+        function buildThinkingBubble() {
+            const el = document.createElement('div');
+            el.className = 'bubble ai thinking';
+            el.innerHTML = `
+                <div class="bubble-label">AI</div>
+                <div class="bubble-thinking">
+                    <div class="bubble-text">Sedang memproses...</div>
 
-            wrap.innerHTML = `
-            <div class="bubble-label">AI</div>
-            <div class="bubble-thinking">
-                <div class="bubble-text">Sedang berpikir...</div>
+                    <div class="process-steps">
+                        <div class="process-step" data-step="1">
+                            <span class="step-dot">1</span>
+                            <div class="process-copy">
+                                <strong>Parse intent</strong>
+                                <p>Mendeteksi maksud pertanyaan admin.</p>
+                            </div>
+                        </div>
 
-                <div class="process-steps">
-                    <div class="process-step" data-step="1">
-                        <span class="step-dot">1</span>
-                        <div class="process-copy">
-                            <strong>Parse intent</strong>
-                            <p>Mendeteksi maksud pertanyaan admin.</p>
+                        <div class="process-step" data-step="2">
+                            <span class="step-dot">2</span>
+                            <div class="process-copy">
+                                <strong>Query database</strong>
+                                <p>Mengambil data dari tabel internal sesuai konteks.</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step" data-step="3">
+                            <span class="step-dot">3</span>
+                            <div class="process-copy">
+                                <strong>Generate response</strong>
+                                <p>Menyusun jawaban ringkas dalam format aman.</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step" data-step="4">
+                            <span class="step-dot">4</span>
+                            <div class="process-copy">
+                                <strong>Save log</strong>
+                                <p>Menyimpan hasil ke ai_logs dan ai_action_logs.</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="process-step" data-step="2">
-                        <span class="step-dot">2</span>
-                        <div class="process-copy">
-                            <strong>Query database</strong>
-                            <p>Mengambil data dari tabel internal sesuai konteks.</p>
-                        </div>
-                    </div>
-
-                    <div class="process-step" data-step="3">
-                        <span class="step-dot">3</span>
-                        <div class="process-copy">
-                            <strong>Generate response</strong>
-                            <p>Menyusun jawaban ringkas dalam format aman.</p>
-                        </div>
-                    </div>
-
-                    <div class="process-step" data-step="4">
-                        <span class="step-dot">4</span>
-                        <div class="process-copy">
-                            <strong>Save log</strong>
-                            <p>Menyimpan hasil ke ai_logs dan ai_action_logs.</p>
+                    <div class="thinking-status">
+                        <strong>Status</strong>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span id="thinkingStatusText">Menunggu proses...</span>
+                            <span class="pulse"></span>
                         </div>
                     </div>
                 </div>
+            `;
 
-                <div class="thinking-status" id="thinkingStatus">
-                    <strong>Status</strong>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span id="thinkingStatusText">Menunggu proses...</span>
-                        <span class="pulse"></span>
-                    </div>
-                </div>
-            </div>
-        `;
-
-            chatBox.appendChild(wrap);
-            thinkingBubble = wrap;
-            processState = {
-                1: wrap.querySelector('[data-step="1"]'),
-                2: wrap.querySelector('[data-step="2"]'),
-                3: wrap.querySelector('[data-step="3"]'),
-                4: wrap.querySelector('[data-step="4"]'),
+            chatBox.appendChild(el);
+            thinkingBubble = el;
+            thinkingStatusText = el.querySelector('#thinkingStatusText');
+            thinkingSteps = {
+                1: el.querySelector('[data-step="1"]'),
+                2: el.querySelector('[data-step="2"]'),
+                3: el.querySelector('[data-step="3"]'),
+                4: el.querySelector('[data-step="4"]'),
             };
 
-            scrollChatToBottom();
+            scrollBottom();
         }
 
-        function removeThinkingBubble() {
-            if (thinkingBubble) {
-                thinkingBubble.remove();
-                thinkingBubble = null;
-            }
-        }
-
-        function addLoadingBubble() {
-            const loading = document.createElement('div');
-            loading.className = 'bubble ai is-hidden';
-            loading.id = 'aiLoadingBubble';
-            loading.innerHTML = `
-            <div class="bubble-label">AI</div>
-            <div class="bubble-text">Sedang memproses...</div>
-        `;
-            chatBox.appendChild(loading);
-            loadingBubble = loading;
-        }
-
-        function removeLoadingBubble() {
-            if (loadingBubble) {
-                loadingBubble.remove();
-                loadingBubble = null;
-            }
-        }
-
-        function setProcessState(step, mode) {
-            const item = processState[step];
+        function setStep(step, mode) {
+            const item = thinkingSteps[step];
             if (!item) return;
 
             item.classList.remove('active', 'done');
@@ -740,36 +716,31 @@
             if (mode === 'done') item.classList.add('done');
         }
 
-        function resetThinkingVisual() {
-            if (!thinkingBubble) return;
+        function clearStageTimers() {
+            stageTimers.forEach(t => clearTimeout(t));
+            stageTimers = [];
 
-            [1, 2, 3, 4].forEach((step) => {
-                if (processState[step]) {
-                    processState[step].classList.remove('active', 'done');
-                }
-            });
-
-            const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-            const statusBox = thinkingBubble.querySelector('#thinkingStatus');
-            if (statusText) statusText.textContent = 'Menunggu proses...';
-            if (statusBox) statusBox.classList.remove('processing-finished');
+            if (elapsedTimer) {
+                clearInterval(elapsedTimer);
+                elapsedTimer = null;
+            }
         }
 
-        function markFinishedThinking() {
-            if (!thinkingBubble) return;
-
-            const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-            const statusBox = thinkingBubble.querySelector('#thinkingStatus');
-            if (statusText) statusText.textContent = 'Proses selesai';
-            if (statusBox) statusBox.classList.add('processing-finished');
+        function removeThinkingBubble() {
+            if (thinkingBubble) {
+                thinkingBubble.remove();
+                thinkingBubble = null;
+                thinkingStatusText = null;
+                thinkingSteps = {};
+            }
         }
 
-        function setBusyState(busy) {
-            isSubmitting = busy;
-            sendBtn.disabled = busy;
-            textarea.disabled = busy;
-            sendBtn.style.opacity = busy ? '.7' : '1';
-            sendBtnText.textContent = busy ? 'Processing...' : 'Send';
+        function setBusyState(state) {
+            isSubmitting = state;
+            sendBtn.disabled = state;
+            textarea.disabled = state;
+            sendBtnText.textContent = state ? 'Processing...' : 'Send';
+            sendBtn.style.opacity = state ? '.7' : '1';
         }
 
         function sleep(ms) {
@@ -779,6 +750,74 @@
         function autoResize() {
             textarea.style.height = 'auto';
             textarea.style.height = Math.min(textarea.scrollHeight, 220) + 'px';
+        }
+
+        function startProgressTimeline(runId) {
+            clearStageTimers();
+            removeThinkingBubble();
+            buildThinkingBubble();
+
+            queryStartedAt = performance.now();
+
+            stageTimers.push(setTimeout(() => {
+                if (runId !== activeRunId || !thinkingBubble) return;
+                setStep(1, 'active');
+                if (thinkingStatusText) thinkingStatusText.textContent = 'Mendeteksi intent...';
+            }, 120));
+
+            stageTimers.push(setTimeout(() => {
+                if (runId !== activeRunId || !thinkingBubble) return;
+                setStep(1, 'done');
+                setStep(2, 'active');
+                stage2StartedAt = performance.now();
+                if (thinkingStatusText) thinkingStatusText.textContent = 'Mengambil data dari database...';
+            }, MIN_STAGE_1));
+        }
+
+        function finishProgressTimeline(runId) {
+            return new Promise(resolve => {
+                if (runId !== activeRunId || !thinkingBubble) {
+                    resolve();
+                    return;
+                }
+
+                const finishStage2 = () => {
+                    if (runId !== activeRunId || !thinkingBubble) {
+                        resolve();
+                        return;
+                    }
+
+                    setStep(2, 'done');
+                    setStep(3, 'active');
+                    stage3StartedAt = performance.now();
+                    if (thinkingStatusText) thinkingStatusText.textContent = 'Menyusun jawaban...';
+
+                    stageTimers.push(setTimeout(() => {
+                        if (runId !== activeRunId || !thinkingBubble) {
+                            resolve();
+                            return;
+                        }
+
+                        setStep(3, 'done');
+                        setStep(4, 'active');
+                        if (thinkingStatusText) thinkingStatusText.textContent = 'Menyimpan log...';
+
+                        stageTimers.push(setTimeout(() => {
+                            if (runId !== activeRunId || !thinkingBubble) {
+                                resolve();
+                                return;
+                            }
+
+                            setStep(4, 'done');
+                            if (thinkingStatusText) thinkingStatusText.textContent = 'Selesai';
+                            resolve();
+                        }, MIN_STAGE_4));
+                    }, MIN_STAGE_3));
+                };
+
+                const waitStage2 = Math.max(0, MIN_STAGE_2 - (performance.now() - stage2StartedAt));
+                stageTimers.push(setTimeout(finishStage2, waitStage2));
+            });
         }
 
         document.querySelectorAll('.quick').forEach(btn => {
@@ -798,53 +837,8 @@
             }
         });
 
-        function clearTimers() {
-            processTimer.forEach(t => clearTimeout(t));
-            processTimer = [];
-        }
-
-        function startThinkingTimeline(runId) {
-            clearTimers();
-            removeThinkingBubble();
-            createThinkingBubble();
-            resetThinkingVisual();
-            scrollChatToBottom();
-
-            processTimer.push(setTimeout(() => {
-                if (runId !== activeRunId || !thinkingBubble) return;
-                setProcessState(1, 'active');
-                const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-                if (statusText) statusText.textContent = 'Mendeteksi maksud pertanyaan...';
-            }, 250));
-
-            processTimer.push(setTimeout(() => {
-                if (runId !== activeRunId || !thinkingBubble) return;
-                setProcessState(1, 'done');
-                setProcessState(2, 'active');
-                const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-                if (statusText) statusText.textContent = 'Mengambil data dari database...';
-            }, 900));
-
-            processTimer.push(setTimeout(() => {
-                if (runId !== activeRunId || !thinkingBubble) return;
-                setProcessState(2, 'done');
-                setProcessState(3, 'active');
-                const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-                if (statusText) statusText.textContent = 'Menyusun jawaban...';
-            }, 1550));
-
-            processTimer.push(setTimeout(() => {
-                if (runId !== activeRunId || !thinkingBubble) return;
-                setProcessState(3, 'done');
-                setProcessState(4, 'active');
-                const statusText = thinkingBubble.querySelector('#thinkingStatusText');
-                if (statusText) statusText.textContent = 'Menyimpan log aktivitas...';
-            }, 2200));
-        }
-
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-
             if (isSubmitting) return;
 
             const question = textarea.value.trim();
@@ -854,12 +848,12 @@
             const runId = activeRunId;
 
             addBubble('user', question);
+
             textarea.value = '';
             autoResize();
 
             setBusyState(true);
-            addLoadingBubble();
-            startThinkingTimeline(runId);
+            startProgressTimeline(runId);
 
             try {
                 const response = await fetch(form.action, {
@@ -879,15 +873,7 @@
 
                 if (runId !== activeRunId) return;
 
-                clearTimers();
-                removeLoadingBubble();
-
-                if (thinkingBubble) {
-                    markFinishedThinking();
-                    setProcessState(4, 'done');
-                }
-
-                await sleep(500);
+                await finishProgressTimeline(runId);
 
                 if (runId !== activeRunId) return;
 
@@ -903,13 +889,13 @@
             } catch (err) {
                 if (runId !== activeRunId) return;
 
-                clearTimers();
-                removeLoadingBubble();
+                clearStageTimers();
                 removeThinkingBubble();
                 addBubble('ai', 'Gagal menghubungi server AI.');
             } finally {
                 if (runId === activeRunId) {
                     setBusyState(false);
+                    clearStageTimers();
                 }
             }
         });

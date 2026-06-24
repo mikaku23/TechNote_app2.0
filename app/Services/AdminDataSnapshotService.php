@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class AdminDataSnapshotService
@@ -28,7 +29,62 @@ class AdminDataSnapshotService
         'system_settings',
         'rekaps',
         'vercel_sync_logs',
+        'ticket_status_logs',
+        'ticket_comments',
+        'contacts',
+        'password_reset_otps',
     ];
+
+    protected array $foreignKeyMap = [
+        'users.role_id' => 'roles',
+        'tickets.user_id' => 'users',
+        'penginstalans.ticket_id' => 'tickets',
+        'penginstalans.user_id' => 'users',
+        'penginstalans.software_id' => 'software',
+        'perbaikans.ticket_id' => 'tickets',
+        'perbaikans.user_id' => 'users',
+        'ai_logs.user_id' => 'users',
+        'ai_tasks.user_id' => 'users',
+        'ai_recommendations.ticket_id' => 'tickets',
+        'notifications.user_id' => 'users',
+        'notifications.ticket_id' => 'tickets',
+        'login_logs.user_id' => 'users',
+        'user_activities.user_id' => 'users',
+        'ticket_status_logs.ticket_id' => 'tickets',
+        'ticket_status_logs.changed_by' => 'users',
+        'ticket_comments.ticket_id' => 'tickets',
+        'ticket_comments.user_id' => 'users',
+        'vercel_sync_logs.ticket_id' => 'tickets',
+        'contacts.user_id' => 'users',
+        'password_reset_otps.user_id' => 'users',
+    ];
+
+
+    protected function softDeleteColumn(string $table): ?string
+    {
+        if (! Schema::hasTable($table)) {
+            return null;
+        }
+
+        if (Schema::hasColumn($table, 'deleted_at')) {
+            return 'deleted_at';
+        }
+
+        if (Schema::hasColumn($table, 'delete_at')) {
+            return 'delete_at';
+        }
+
+        return null;
+    }
+
+    protected function applyActiveScope($query, string $table): void
+    {
+        $column = $this->softDeleteColumn($table);
+
+        if ($column) {
+            $query->whereNull($column);
+        }
+    }
 
     public function overview(): array
     {
@@ -54,9 +110,9 @@ class AdminDataSnapshotService
                     'pending' => (int) DB::table('rekaps')->where('rekap_date', $today)->sum('pending_tickets'),
                 ],
                 'counts' => [
-                    'users' => (int) DB::table('users')->whereNull('deleted_at')->count(),
-                    'roles' => (int) DB::table('roles')->whereNull('deleted_at')->count(),
-                    'software' => (int) DB::table('software')->whereNull('deleted_at')->count(),
+                    'users' => (int) DB::table('users')->when($this->softDeleteColumn('users'), fn ($q, $c) => $q->whereNull($c))->count(),
+                    'roles' => (int) DB::table('roles')->when($this->softDeleteColumn('roles'), fn ($q, $c) => $q->whereNull($c))->count(),
+                    'software' => (int) DB::table('software')->when($this->softDeleteColumn('software'), fn ($q, $c) => $q->whereNull($c))->count(),
                     'trusted_websites' => (int) DB::table('trusted_websites')->where('is_active', 1)->count(),
                     'maintenances' => (int) DB::table('maintenances')->count(),
                     'ai_logs' => (int) DB::table('ai_logs')->count(),
@@ -85,31 +141,85 @@ class AdminDataSnapshotService
         $cacheKey = 'ai:admin:entity:' . $entity . ':' . $limit . ':' . hash('sha1', json_encode($filters, JSON_UNESCAPED_UNICODE));
 
         return $this->remember($cacheKey, function () use ($entity, $limit, $filters) {
-            return match ($entity) {
-                'users' => $this->users($limit, $filters),
-                'roles' => $this->roles($limit),
-                'software' => $this->software($limit),
-                'tickets' => $this->tickets($limit, $filters),
-                'penginstalans' => $this->penginstalans($limit),
-                'perbaikans' => $this->perbaikans($limit),
-                'trusted_websites' => $this->trustedWebsites($limit),
-                'login_logs' => $this->loginLogs($limit),
-                'user_activities' => $this->activities($limit),
-                'ai_logs' => $this->aiLogs($limit),
-                'ai_tasks' => $this->aiTasks($limit),
-                'ai_recommendations' => $this->aiRecommendations($limit),
-                'notifications' => $this->notifications($limit),
-                'maintenances' => $this->maintenances($limit),
-                'system_settings' => $this->systemSettings($limit),
-                'rekaps' => $this->rekaps($limit),
-                'vercel_sync_logs' => $this->vercelSyncLogs($limit),
-                default => [
-                    'entity' => $entity,
-                    'items' => [],
-                    'note' => 'entity tidak dikenali',
-                ],
-            };
+            return [
+                'entity' => $entity,
+                'items' => $this->queryEntity($entity, $limit, $filters),
+                'limit' => $limit,
+                'filters' => $filters,
+                'count' => $this->countEntity($entity, $filters),
+            ];
         });
+    }
+
+    public function byId(string $entity, int $id): array
+    {
+        $entity = mb_strtolower(trim($entity));
+        $query = DB::table($entity);
+        $this->applyActiveScope($query, $entity);
+
+        $row = $query
+            ->where('id', $id)
+            ->first();
+
+        return [
+            'entity' => $entity,
+            'item' => $row ? $this->enrichRowWithRelations($entity, $row) : null,
+        ];
+    }
+
+    public function search(string $entity, array $criteria, int $limit = 10): array
+    {
+        $entity = mb_strtolower(trim($entity));
+        $query = DB::table($entity);
+        $this->applyActiveScope($query, $entity);
+
+        foreach ($criteria as $field => $value) {
+            $field = mb_strtolower(trim((string) $field));
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            if (! Schema::hasColumn($entity, $field)) {
+                continue;
+            }
+
+            if ($field === 'id' && is_numeric($value)) {
+                $query->where('id', (int) $value);
+            } elseif (is_numeric($value)) {
+                $query->where($field, (string) $value);
+            } else {
+                $query->where($field, 'like', '%' . trim((string) $value) . '%');
+            }
+        }
+
+        return [
+            'entity' => $entity,
+            'items' => $this->enrichRowsWithRelations(
+                $entity,
+                $query->orderBy('id')->limit($limit)->get($this->previewColumns($entity))->toArray()
+            ),
+        ];
+    }
+
+    public function today(string $entity, int $limit = 10): array
+    {
+        $entity = mb_strtolower(trim($entity));
+        $query = DB::table($entity);
+        $this->applyActiveScope($query, $entity);
+
+        if ($entity === 'rekaps' && Schema::hasColumn($entity, 'rekap_date')) {
+            $query->whereDate('rekap_date', now()->toDateString());
+        } elseif (Schema::hasColumn($entity, 'created_at')) {
+            $query->whereDate('created_at', now()->toDateString());
+        }
+
+        return [
+            'entity' => $entity,
+            'items' => $this->enrichRowsWithRelations(
+                $entity,
+                $query->orderBy('id')->limit($limit)->get($this->previewColumns($entity))->toArray()
+            ),
+        ];
     }
 
     public function refreshAll(): void
@@ -126,16 +236,308 @@ class AdminDataSnapshotService
         return $this->entities;
     }
 
+    protected function queryEntity(string $entity, int $limit, array $filters): array
+    {
+        if (! in_array($entity, $this->entities, true) || ! Schema::hasTable($entity)) {
+            return [];
+        }
+
+        $query = DB::table($entity);
+        $this->applyActiveScope($query, $entity);
+
+        if (($filters['today'] ?? false) === true) {
+            if ($entity === 'rekaps' && Schema::hasColumn($entity, 'rekap_date')) {
+                $query->whereDate('rekap_date', now()->toDateString());
+            } elseif (Schema::hasColumn($entity, 'created_at')) {
+                $query->whereDate('created_at', now()->toDateString());
+            }
+        }
+
+        if (($filters['id'] ?? null) && is_numeric($filters['id'])) {
+            $query->where('id', (int) $filters['id']);
+        }
+
+        if (($filters['search'] ?? null) !== null && $filters['search'] !== '') {
+            $this->applySearch($query, $entity, (string) $filters['search']);
+        }
+
+        return $this->enrichRowsWithRelations(
+            $entity,
+            $query
+                ->orderBy('id')
+                ->limit($limit)
+                ->get($this->previewColumns($entity))
+                ->toArray()
+        );
+    }
+
+    protected function applySearch($query, string $entity, string $term): void
+    {
+        $term = trim($term);
+        $columns = $this->searchableColumns($entity);
+
+        $query->where(function ($q) use ($columns, $term) {
+            foreach ($columns as $i => $column) {
+                if ($i === 0) {
+                    $q->where($column, 'like', '%' . $term . '%');
+                } else {
+                    $q->orWhere($column, 'like', '%' . $term . '%');
+                }
+            }
+        });
+    }
+
+    protected function countEntity(string $entity, array $filters): int
+    {
+        if (! in_array($entity, $this->entities, true) || ! Schema::hasTable($entity)) {
+            return 0;
+        }
+
+        $query = DB::table($entity);
+        $this->applyActiveScope($query, $entity);
+
+        if (($filters['today'] ?? false) === true) {
+            if ($entity === 'rekaps' && Schema::hasColumn($entity, 'rekap_date')) {
+                $query->whereDate('rekap_date', now()->toDateString());
+            } elseif (Schema::hasColumn($entity, 'created_at')) {
+                $query->whereDate('created_at', now()->toDateString());
+            }
+        }
+
+        if (($filters['id'] ?? null) && is_numeric($filters['id'])) {
+            $query->where('id', (int) $filters['id']);
+        }
+
+        return (int) $query->count();
+    }
+
+    protected function searchableColumns(string $entity): array
+    {
+        return match ($entity) {
+            'users' => ['id', 'name', 'username', 'email', 'nim', 'nip', 'no_hp'],
+            'roles' => ['id', 'name', 'description'],
+            'software' => ['id', 'name', 'developer', 'version', 'description'],
+            'tickets' => ['id', 'ticket_number', 'type', 'status', 'priority'],
+            'penginstalans' => ['id', 'installation_result', 'note'],
+            'perbaikans' => ['id', 'item_name', 'item_location', 'damage_description', 'repair_action', 'repair_result', 'note'],
+            'trusted_websites' => ['id', 'name', 'url', 'description'],
+            'login_logs' => ['id', 'status', 'ip_address', 'user_agent', 'location_status'],
+            'user_activities' => ['id', 'module', 'activity', 'description'],
+            'ai_logs' => ['id', 'role', 'question', 'answer', 'action', 'source'],
+            'ai_tasks' => ['id', 'task_name', 'instruction', 'status'],
+            'ai_recommendations' => ['id', 'recommendation', 'reason', 'status'],
+            'notifications' => ['id', 'type', 'title', 'message', 'is_read'],
+            'maintenances' => ['id', 'message', 'is_active'],
+            'system_settings' => ['id', 'key', 'value', 'description'],
+            'rekaps' => ['id', 'rekap_date'],
+            'vercel_sync_logs' => ['id', 'sync_status', 'response'],
+            'ticket_status_logs' => ['id', 'old_status', 'new_status', 'note'],
+            'ticket_comments' => ['id', 'comment'],
+            'contacts' => ['id', 'subject', 'message', 'category', 'status'],
+            'password_reset_otps' => ['id', 'otp', 'expired_at'],
+            default => ['id'],
+        };
+    }
+
+    protected function previewColumns(string $table): array
+    {
+        $columns = Schema::getColumnListing($table);
+
+        $preferred = [
+            'id','role_id','user_id','ticket_id','software_id','changed_by','ai_log_id',
+            'name','username','email','nim','nip','no_hp','ticket_number','type','status','priority',
+            'title','message','description','developer','version','task_name','instruction','recommendation','reason',
+            'item_name','item_location','damage_description','repair_action','repair_result','installation_result',
+            'note','url','key','value','sync_status','response','rekap_date','comment','module','activity',
+            'created_at','updated_at','deleted_at','delete_at','is_active','is_read','is_public','is_internal'
+        ];
+
+        $selected = array_values(array_intersect($preferred, $columns));
+
+        return ! empty($selected) ? $selected : ['*'];
+    }
+
+    protected function latestTickets(int $limit): array
+    {
+        return DB::table('tickets')
+            ->when($this->softDeleteColumn('tickets'), fn ($q, $c) => $q->whereNull($c))
+            ->orderByDesc('id')->limit($limit)->get($this->previewColumns('tickets'))->toArray();
+    }
+
+    protected function latestAiLogs(int $limit): array
+    {
+        return DB::table('ai_logs as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
+            ->orderByDesc('a.id')
+            ->limit($limit)
+            ->select('a.id','a.role','a.question','a.answer','a.action','a.source','a.created_at','u.name as user_name')
+            ->get()
+            ->toArray();
+    }
+
+    protected function latestAiTasks(int $limit): array
+    {
+        return DB::table('ai_tasks as t')
+            ->leftJoin('users as u', 'u.id', '=', 't.user_id')
+            ->orderByDesc('t.id')
+            ->limit($limit)
+            ->select('t.id','t.task_name','t.instruction','t.status','t.created_at','u.name as user_name')
+            ->get()
+            ->toArray();
+    }
+
+    protected function latestAiRecommendations(int $limit): array
+    {
+        return DB::table('ai_recommendations as r')
+            ->leftJoin('tickets as t', 't.id', '=', 'r.ticket_id')
+            ->orderByDesc('r.id')
+            ->limit($limit)
+            ->select('r.id','r.recommendation','r.reason','r.status','r.created_at','t.ticket_number')
+            ->get()
+            ->toArray();
+    }
+
+    protected function latestLoginLogs(int $limit): array
+    {
+        return DB::table('login_logs as l')
+            ->leftJoin('users as u', 'u.id', '=', 'l.user_id')
+            ->orderByDesc('l.id')
+            ->limit($limit)
+            ->select('l.id','u.name as user_name','l.status','l.ip_address','l.login_at','l.logout_at','l.location_status','l.created_at')
+            ->get()
+            ->toArray();
+    }
+
+    protected function latestActivities(int $limit): array
+    {
+        return DB::table('user_activities as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
+            ->orderByDesc('a.id')
+            ->limit($limit)
+            ->select('a.id','u.name as user_name','a.module','a.activity','a.description','a.created_at')
+            ->get()
+            ->toArray();
+    }
+
+    protected function latestNotifications(int $limit): array
+    {
+        return DB::table('notifications as n')
+            ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
+            ->orderByDesc('n.id')
+            ->limit($limit)
+            ->select('n.id','u.name as user_name','n.type','n.title','n.message','n.is_read','n.created_at')
+            ->get()
+            ->toArray();
+    }
+
+
+    protected function enrichRowsWithRelations(string $table, array $rows): array
+    {
+        return array_map(function ($row) use ($table) {
+            return $this->enrichRowWithRelations($table, $row);
+        }, $rows);
+    }
+
+    protected function enrichRowWithRelations(string $table, mixed $row): mixed
+    {
+        if (! is_array($row) && ! is_object($row)) {
+            return $row;
+        }
+
+        $data = (array) $row;
+
+        foreach ($this->foreignKeyMap as $mapKey => $foreignTable) {
+            [$sourceTable, $column] = explode('.', $mapKey, 2);
+
+            if ($sourceTable !== $table) {
+                continue;
+            }
+
+            $relatedId = $data[$column] ?? null;
+
+            if (! is_numeric($relatedId) || ! Schema::hasTable($foreignTable)) {
+                continue;
+            }
+
+            $related = DB::table($foreignTable)->where('id', (int) $relatedId)->first();
+
+            if (! $related) {
+                continue;
+            }
+
+            $relatedData = (array) $related;
+            $alias = $this->relationAlias($column, $foreignTable);
+            $display = $this->relationDisplayValue($foreignTable, $relatedData);
+
+            if ($display !== null) {
+                $data[$alias] = $display;
+            }
+
+            if ($foreignTable === 'roles') {
+                $data['role_status'] = $this->boolText($relatedData['is_active'] ?? null);
+            } elseif (isset($relatedData['is_active'])) {
+                $data[$alias . '_status'] = $this->boolText($relatedData['is_active']);
+            }
+        }
+
+        if (is_object($row)) {
+            foreach ($data as $key => $value) {
+                $row->{$key} = $value;
+            }
+            return $row;
+        }
+
+        return $data;
+    }
+
+    protected function relationAlias(string $column, string $foreignTable): string
+    {
+        return match ($foreignTable) {
+            'roles' => 'role_name',
+            'users' => 'user_name',
+            'software' => 'software_name',
+            'tickets' => 'ticket_number',
+            default => (preg_replace('/_id$/', '', $column) ?: $column) . '_name',
+        };
+    }
+
+    protected function relationDisplayValue(string $foreignTable, array $row): ?string
+    {
+        $preferred = match ($foreignTable) {
+            'users' => ['name', 'username', 'email', 'nim', 'nip'],
+            'roles' => ['name', 'description'],
+            'software' => ['name', 'developer', 'version'],
+            'tickets' => ['ticket_number', 'status', 'type'],
+            'trusted_websites' => ['name', 'url'],
+            default => ['name', 'title', 'ticket_number', 'subject', 'task_name', 'item_name', 'module', 'key', 'url', 'description'],
+        };
+
+        foreach ($preferred as $field) {
+            $value = $row[$field] ?? null;
+            if ($value !== null && $value !== '') {
+                return is_scalar($value) ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        return null;
+    }
+
+    protected function boolText(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'unknown';
+        }
+
+        return (bool) $value ? 'active' : 'inactive';
+    }
+
     protected function remember(string $key, callable $callback): mixed
     {
         return Cache::remember($key, now()->addSeconds($this->ttlSeconds), function () use ($callback) {
             try {
                 return $callback();
             } catch (Throwable $e) {
-                logger()->warning('AI admin snapshot error', [
-                    'message' => $e->getMessage(),
-                ]);
-
+                logger()->warning('AI admin snapshot error', ['message' => $e->getMessage()]);
                 return [];
             }
         });
@@ -148,441 +550,6 @@ class AdminDataSnapshotService
 
     protected function forgetPrefix(string $prefix): void
     {
-        // Aman untuk cache driver umum: tidak menghapus massal lewat pattern jika tidak didukung.
-        // Fungsi ini sengaja dibiarkan sebagai no-op kompatibel.
-    }
-
-    protected function latestTickets(int $limit): array
-    {
-        return DB::table('tickets')
-            ->orderByDesc('created_at')
-            ->limit($limit)
-            ->get([
-                'ticket_number',
-                'type',
-                'status',
-                'priority',
-                'booking_date',
-                'session',
-                'queue_number',
-                'scheduled_start',
-                'scheduled_end',
-                'created_at',
-            ])
-            ->toArray();
-    }
-
-    protected function latestAiLogs(int $limit): array
-    {
-        return DB::table('ai_logs as a')
-            ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
-            ->orderByDesc('a.id')
-            ->limit($limit)
-            ->select(
-                'a.id',
-                'a.role',
-                'a.question',
-                'a.answer',
-                'a.action',
-                'a.source',
-                'a.created_at',
-                'u.name as user_name'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function latestAiTasks(int $limit): array
-    {
-        return DB::table('ai_tasks as t')
-            ->leftJoin('users as u', 'u.id', '=', 't.user_id')
-            ->orderByDesc('t.id')
-            ->limit($limit)
-            ->select(
-                't.id',
-                't.task_name',
-                't.instruction',
-                't.status',
-                't.created_at',
-                'u.name as user_name'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function latestAiRecommendations(int $limit): array
-    {
-        return DB::table('ai_recommendations as r')
-            ->leftJoin('tickets as t', 't.id', '=', 'r.ticket_id')
-            ->orderByDesc('r.id')
-            ->limit($limit)
-            ->select(
-                'r.id',
-                'r.recommendation',
-                'r.reason',
-                'r.status',
-                'r.created_at',
-                't.ticket_number'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function latestLoginLogs(int $limit): array
-    {
-        return DB::table('login_logs as l')
-            ->leftJoin('users as u', 'u.id', '=', 'l.user_id')
-            ->orderByDesc('l.id')
-            ->limit($limit)
-            ->select(
-                'l.id',
-                'u.name as user_name',
-                'l.status',
-                'l.ip_address',
-                'l.login_at',
-                'l.logout_at',
-                'l.location_status',
-                'l.created_at'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function latestActivities(int $limit): array
-    {
-        return DB::table('user_activities as a')
-            ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
-            ->orderByDesc('a.id')
-            ->limit($limit)
-            ->select(
-                'a.id',
-                'u.name as user_name',
-                'a.module',
-                'a.activity',
-                'a.description',
-                'a.created_at'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function latestNotifications(int $limit): array
-    {
-        return DB::table('notifications as n')
-            ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
-            ->leftJoin('tickets as t', 't.id', '=', 'n.ticket_id')
-            ->orderByDesc('n.id')
-            ->limit($limit)
-            ->select(
-                'n.id',
-                'u.name as user_name',
-                't.ticket_number',
-                'n.type',
-                'n.title',
-                'n.message',
-                'n.is_read',
-                'n.created_at'
-            )
-            ->get()
-            ->toArray();
-    }
-
-    protected function users(int $limit, array $filters = []): array
-    {
-        $q = DB::table('users as u')
-            ->leftJoin('roles as r', 'r.id', '=', 'u.role_id')
-            ->orderByDesc('u.id')
-            ->limit($limit)
-            ->select(
-                'u.id',
-                'u.name',
-                'u.username',
-                'u.email',
-                'u.nim',
-                'u.nip',
-                'u.no_hp',
-                'u.last_login_at',
-                'u.created_at',
-                'r.name as role_name',
-                'r.description as role_description'
-            );
-
-        if (! empty($filters['role'])) {
-            $q->where('r.name', $filters['role']);
-        }
-
-        return [
-            'entity' => 'users',
-            'items' => $q->get()->toArray(),
-        ];
-    }
-
-    protected function roles(int $limit): array
-    {
-        return [
-            'entity' => 'roles',
-            'items' => DB::table('roles')
-                ->orderByDesc('id')
-                ->limit($limit)
-                ->get(['id', 'name', 'description', 'is_active', 'created_at'])
-                ->toArray(),
-        ];
-    }
-
-    protected function software(int $limit): array
-    {
-        return [
-            'entity' => 'software',
-            'items' => DB::table('software')
-                ->orderByDesc('id')
-                ->limit($limit)
-                ->get(['id', 'name', 'developer', 'version', 'estimated_minutes', 'description', 'created_at'])
-                ->toArray(),
-        ];
-    }
-
-    protected function tickets(int $limit, array $filters = []): array
-    {
-        $q = DB::table('tickets')
-            ->orderByDesc('created_at')
-            ->limit($limit)
-            ->get([
-                'id',
-                'ticket_number',
-                'type',
-                'status',
-                'priority',
-                'booking_date',
-                'session',
-                'queue_number',
-                'scheduled_start',
-                'scheduled_end',
-                'estimated_finish',
-                'completed_at',
-                'created_at',
-            ]);
-
-        return [
-            'entity' => 'tickets',
-            'items' => $q->toArray(),
-        ];
-    }
-
-    protected function penginstalans(int $limit): array
-    {
-        return [
-            'entity' => 'penginstalans',
-            'items' => DB::table('penginstalans as p')
-                ->leftJoin('tickets as t', 't.id', '=', 'p.ticket_id')
-                ->leftJoin('users as u', 'u.id', '=', 'p.user_id')
-                ->leftJoin('software as s', 's.id', '=', 'p.software_id')
-                ->orderByDesc('p.id')
-                ->limit($limit)
-                ->select(
-                    'p.id',
-                    'p.installation_result',
-                    'p.note',
-                    'p.created_at',
-                    't.ticket_number',
-                    't.status as ticket_status',
-                    'u.name as user_name',
-                    's.name as software_name',
-                    's.version as software_version'
-                )
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function perbaikans(int $limit): array
-    {
-        return [
-            'entity' => 'perbaikans',
-            'items' => DB::table('perbaikans as p')
-                ->leftJoin('tickets as t', 't.id', '=', 'p.ticket_id')
-                ->leftJoin('users as u', 'u.id', '=', 'p.user_id')
-                ->orderByDesc('p.id')
-                ->limit($limit)
-                ->select(
-                    'p.id',
-                    'p.item_name',
-                    'p.item_location',
-                    'p.damage_description',
-                    'p.repair_action',
-                    'p.repair_result',
-                    'p.note',
-                    'p.created_at',
-                    't.ticket_number',
-                    't.status as ticket_status',
-                    'u.name as user_name'
-                )
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function trustedWebsites(int $limit): array
-    {
-        return [
-            'entity' => 'trusted_websites',
-            'items' => DB::table('trusted_websites')
-                ->orderByDesc('id')
-                ->limit($limit)
-                ->get(['id', 'name', 'url', 'description', 'is_active', 'created_at'])
-                ->toArray(),
-        ];
-    }
-
-    protected function loginLogs(int $limit): array
-    {
-        return [
-            'entity' => 'login_logs',
-            'items' => DB::table('login_logs as l')
-                ->leftJoin('users as u', 'u.id', '=', 'l.user_id')
-                ->orderByDesc('l.id')
-                ->limit($limit)
-                ->select(
-                    'l.id',
-                    'u.name as user_name',
-                    'l.status',
-                    'l.ip_address',
-                    'l.login_at',
-                    'l.logout_at',
-                    'l.location_status',
-                    'l.created_at'
-                )
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function activities(int $limit): array
-    {
-        return [
-            'entity' => 'user_activities',
-            'items' => DB::table('user_activities as a')
-                ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
-                ->orderByDesc('a.id')
-                ->limit($limit)
-                ->select('a.id', 'u.name as user_name', 'a.module', 'a.activity', 'a.description', 'a.created_at')
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function aiLogs(int $limit): array
-    {
-        return [
-            'entity' => 'ai_logs',
-            'items' => DB::table('ai_logs as a')
-                ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
-                ->orderByDesc('a.id')
-                ->limit($limit)
-                ->select('a.id', 'u.name as user_name', 'a.role', 'a.question', 'a.answer', 'a.action', 'a.source', 'a.created_at')
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function aiTasks(int $limit): array
-    {
-        return [
-            'entity' => 'ai_tasks',
-            'items' => DB::table('ai_tasks as t')
-                ->leftJoin('users as u', 'u.id', '=', 't.user_id')
-                ->orderByDesc('t.id')
-                ->limit($limit)
-                ->select('t.id', 'u.name as user_name', 't.task_name', 't.instruction', 't.status', 't.created_at')
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function aiRecommendations(int $limit): array
-    {
-        return [
-            'entity' => 'ai_recommendations',
-            'items' => DB::table('ai_recommendations as r')
-                ->leftJoin('tickets as t', 't.id', '=', 'r.ticket_id')
-                ->orderByDesc('r.id')
-                ->limit($limit)
-                ->select('r.id', 't.ticket_number', 'r.recommendation', 'r.reason', 'r.status', 'r.created_at')
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function notifications(int $limit): array
-    {
-        return [
-            'entity' => 'notifications',
-            'items' => DB::table('notifications as n')
-                ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
-                ->leftJoin('tickets as t', 't.id', '=', 'n.ticket_id')
-                ->orderByDesc('n.id')
-                ->limit($limit)
-                ->select('n.id', 'u.name as user_name', 't.ticket_number', 'n.type', 'n.title', 'n.message', 'n.is_read', 'n.created_at')
-                ->get()
-                ->toArray(),
-        ];
-    }
-
-    protected function maintenances(int $limit): array
-    {
-        return [
-            'entity' => 'maintenances',
-            'items' => DB::table('maintenances')
-                ->orderByDesc('id')
-                ->limit($limit)
-                ->get(['id', 'is_active', 'message', 'started_at', 'ended_at', 'created_at'])
-                ->toArray(),
-        ];
-    }
-
-    protected function systemSettings(int $limit): array
-    {
-        return [
-            'entity' => 'system_settings',
-            'items' => DB::table('system_settings')
-                ->orderByDesc('id')
-                ->limit($limit)
-                ->get(['id', 'key', 'value', 'description', 'created_at'])
-                ->toArray(),
-        ];
-    }
-
-    protected function rekaps(int $limit): array
-    {
-        return [
-            'entity' => 'rekaps',
-            'items' => DB::table('rekaps')
-                ->orderByDesc('rekap_date')
-                ->limit($limit)
-                ->get([
-                    'id',
-                    'rekap_date',
-                    'total_installations',
-                    'total_repairs',
-                    'completed_tickets',
-                    'failed_tickets',
-                    'pending_tickets',
-                    'created_at',
-                ])
-                ->toArray(),
-        ];
-    }
-
-    protected function vercelSyncLogs(int $limit): array
-    {
-        return [
-            'entity' => 'vercel_sync_logs',
-            'items' => DB::table('vercel_sync_logs as v')
-                ->leftJoin('tickets as t', 't.id', '=', 'v.ticket_id')
-                ->orderByDesc('v.id')
-                ->limit($limit)
-                ->select('v.id', 't.ticket_number', 'v.sync_status', 'v.response', 'v.synced_at', 'v.created_at')
-                ->get()
-                ->toArray(),
-        ];
+        // no-op for driver compatibility
     }
 }

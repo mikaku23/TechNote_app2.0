@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use Throwable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 class TrustedWebsiteService
 {
@@ -12,10 +12,7 @@ class TrustedWebsiteService
     {
         $m = mb_strtolower($message);
 
-        return (bool) preg_match(
-            '/\b(stmik|karang baru|smkn?\s*1\s*karang\s*baru|smkn1\s*karang\s*baru|trusted website|website terpercaya|situs resmi|website resmi)\b/u',
-            $m
-        );
+        return (bool) preg_match('/\b(stmik|karang baru|smkn?\s*1\s*karang\s*baru|kampus|triguna dharma|trusted website|website resmi|situs resmi|sumber resmi)\b/u', $m);
     }
 
     public function matchTrustedWebsite(string $message): ?object
@@ -32,17 +29,13 @@ class TrustedWebsiteService
         }
 
         $matched = $sites->first(function ($site) use ($m) {
-            $blob = mb_strtolower(
-                ($site->name ?? '') . ' ' .
-                    ($site->url ?? '') . ' ' .
-                    ($site->description ?? '')
-            );
+            $blob = mb_strtolower(($site->name ?? '') . ' ' . ($site->url ?? '') . ' ' . ($site->description ?? ''));
 
             return str_contains($blob, 'stmik')
                 || str_contains($blob, 'karang baru')
                 || str_contains($blob, 'smkn')
-                || str_contains($blob, 'smk negeri 1 karang baru')
-                || str_contains($m, mb_strtolower($site->name ?? ''));
+                || str_contains($m, mb_strtolower($site->name ?? ''))
+                || str_contains($m, mb_strtolower($site->url ?? ''));
         });
 
         return $matched ?: $sites->first();
@@ -64,7 +57,6 @@ class TrustedWebsiteService
             }
 
             $html = (string) $response->body();
-
             $text = strip_tags($html);
             $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $text = preg_replace('/\s+/u', ' ', $text);
@@ -76,19 +68,13 @@ class TrustedWebsiteService
 
             return mb_strimwidth($text, 0, 12000, '...');
         } catch (Throwable $e) {
-            logger()->warning('Trusted website fetch failed', [
-                'url' => $url,
-                'message' => $e->getMessage(),
-            ]);
-
+            logger()->warning('Trusted website fetch failed', ['url' => $url, 'message' => $e->getMessage()]);
             return null;
         }
     }
 
-    public function answerFromTrustedWebsite(
-        string $question,
-        OpenRouterService $openRouterService
-    ): ?array {
+    public function answerFromTrustedWebsite(string $question, OpenRouterService $openRouterService): ?array
+    {
         if (! $this->isTrustedWebsiteQuestion($question)) {
             return null;
         }
@@ -141,11 +127,9 @@ Aturan:
 - Jika pertanyaan tidak ada di sumber, jawab "informasi tidak tersedia".
 PROMPT;
 
-        $userPrompt = "Pertanyaan user: {$question}";
-
         $reply = $openRouterService->chat([
             ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $userPrompt],
+            ['role' => 'user', 'content' => "Pertanyaan user: {$question}"],
         ], 'deepseek/deepseek-chat', 30, 500, 0.2);
 
         if (! $reply) {

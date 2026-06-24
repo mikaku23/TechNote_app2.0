@@ -1,18 +1,18 @@
 <?php
 
 return [
+    'type' => 'intent',
+    'priority' => 90,
     'trigger' => [
         'kontak',
         'contact',
         'saran',
         'kritik',
         'pesan',
-        'ticket',
         'laporan',
         'keluhan',
         'hubungi',
-        'send message',
+        'send message'
     ],
-
-    'response' => 'pesan anda telah terkirim dan diterima oleh pihak kampus.',
+    'response' => 'pesan anda telah diterima oleh sistem.',
 ];

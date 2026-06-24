@@ -1,10 +1,2 @@
 <?php
-return [
-    'adalah',
-    'ialah',
-    'akan',
-    'sedang',
-    'telah',
-    'sudah',
-    'belum'
-];
+return ['adalah','ialah','akan','sedang','telah','sudah','belum','tolong','mohon'];

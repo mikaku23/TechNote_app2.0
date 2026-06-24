@@ -2,15 +2,15 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
 use Throwable;
+use App\Services\SystemControlService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 
 class LogicAIforAdmin
 {
     protected int $cacheTtlMinutes = 15;
-    protected ?string $apiKey;
+    protected ?string $apiKey = null;
 
     public function __construct(
         protected KeywordService $keywordService,
@@ -18,7 +18,11 @@ class LogicAIforAdmin
         protected AdminActionService $actionService,
         protected OpenRouterService $openRouterService,
         protected TrustedWebsiteService $trustedWebsiteService,
-        protected AiCrudExecutorService $crudExecutorService
+        protected AiCrudExecutorService $crudExecutorService,
+        protected CrudPlanService $crudPlanService,
+        protected IntentPlannerService $intentPlannerService,
+        protected AiTraceService $traceService,
+        protected SystemControlService $systemControlService
     ) {
         $this->apiKey = config('services.openrouter.api_key') ?: env('OPENROUTER_API_KEY');
     }
@@ -39,120 +43,30 @@ class LogicAIforAdmin
             ]);
         }
 
-        if (empty($this->apiKey)) {
-            return $this->normalizeResult([
-                'ok' => false,
-                'reply' => 'OPENROUTER_API_KEY belum diatur di .env.',
-                'action' => 'error',
-                'blocked' => false,
-                'source' => 'config',
-                'confidence' => 0,
-                'needs_confirmation' => false,
-            ]);
-        }
-
-        $role = $this->resolveRoleName($user);
-        $antiMode = $this->keywordService->isAntiAiModeEnabled();
-        $needsApproval = $this->keywordService->needsAiAdminApproval();
-        $canWriteDirectly = $this->keywordService->canAiWriteDirectly();
-        $canWrite = $this->keywordService->canAiWrite();
-
         try {
-            if ($this->keywordService->isBlockedMessage($question)) {
-                $reply = 'Maaf, saya tidak memahami atau tidak memiliki informasi terkait permintaan tersebut.';
-                $aiLogId = $this->logAi($user, $question, $reply, 'blocked', 'keyword_guard');
+            $role = $this->resolveRoleName($user);
+            $warning = $this->keywordService->detectProfanityWarning($question);
+            $plan = $this->intentPlannerService->plan($user, $question, $context);
 
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'blocked',
-                    actionData: json_encode([
-                        'question' => $question,
-                        'reason' => 'keyword_guard',
-                    ], JSON_UNESCAPED_UNICODE),
-                    result: 'blocked'
-                );
+            $plan = $this->recheckDataRoute($question, $plan);
 
+            if (($plan['intent'] ?? '') === 'empty') {
                 return $this->normalizeResult([
-                    'ok' => true,
-                    'reply' => $reply,
-                    'action' => 'blocked',
-                    'blocked' => true,
-                    'source' => 'keyword_guard',
-                    'confidence' => 1,
+                    'ok' => false,
+                    'reply' => 'Pertanyaan masih kosong.',
+                    'action' => 'none',
+                    'blocked' => false,
+                    'source' => 'validator',
+                    'confidence' => 0,
                     'needs_confirmation' => false,
                 ]);
             }
 
-            $warning = $this->keywordService->detectProfanityWarning($question);
-            $contextDetect = $this->actionService->detectContext($question);
-
-            $entity = $contextDetect['entity'] ?? null;
-            $operation = $contextDetect['operation'] ?? 'analyze';
-            $isWrite = $this->actionService->isWriteOperation($operation);
-
-            if ($this->trustedWebsiteService->isTrustedWebsiteQuestion($question)) {
-                $trusted = $this->trustedWebsiteService->answerFromTrustedWebsite($question, $this->openRouterService);
-
-                if ($trusted) {
-                    $this->pushHistory($user, $question, $trusted['reply']);
-
-                    $aiLogId = $this->logAi(
-                        $user,
-                        $question,
-                        $trusted['reply'],
-                        'trusted_website',
-                        $trusted['source'] ?? 'trusted_website'
-                    );
-
-                    $this->logAction(
-                        aiLogId: $aiLogId,
-                        actionType: 'trusted_website',
-                        actionData: json_encode([
-                            'question' => $question,
-                            'website_name' => $trusted['website_name'] ?? null,
-                            'website_url' => $trusted['website_url'] ?? null,
-                        ], JSON_UNESCAPED_UNICODE),
-                        result: 'success'
-                    );
-
-                    return $this->normalizeResult([
-                        'ok' => true,
-                        'reply' => $warning . $trusted['reply'],
-                        'action' => 'trusted_website',
-                        'blocked' => false,
-                        'source' => $trusted['source'] ?? 'trusted_website',
-                        'confidence' => $trusted['confidence'] ?? 1,
-                        'needs_confirmation' => false,
-                    ]);
-                }
-            }
-
-            if ($entity && $isWrite) {
-                return $this->handleCrudAction(
-                    user: $user,
-                    question: $question,
-                    context: $context,
-                    role: $role,
-                    entity: $entity,
-                    operation: $operation,
-                    antiMode: $antiMode,
-                    needsApproval: $needsApproval,
-                    canWriteDirectly: $canWriteDirectly,
-                    warning: $warning
-                );
-            }
-
-            if ($this->keywordService->isGreeting($question)) {
-                $reply = $warning . $this->keywordService->getGreetingPrefix($question) . ' Saya AI Admin TechNoteApp 2.0. Ada yang bisa dibantu mengenai tiket, rekap, log, software, maintenance, penginstalan, perbaikan, atau trusted website?';
+            if (($plan['route'] ?? '') === 'greeting') {
+                $reply = $warning . $this->keywordService->getGreetingPrefix($question) . ' Saya AI Admin TechNoteApp 2.0. Ada yang bisa dibantu mengenai data, tiket, rekap, software, maintenance, atau trusted website?';
                 $this->pushHistory($user, $question, $reply);
                 $aiLogId = $this->logAi($user, $question, $reply, 'greeting', 'rule');
-
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'greeting',
-                    actionData: json_encode(['question' => $question], JSON_UNESCAPED_UNICODE),
-                    result: 'success'
-                );
+                $this->logAction($aiLogId, 'greeting', ['question' => $question], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
@@ -165,21 +79,19 @@ class LogicAIforAdmin
                 ]);
             }
 
-            if ($this->keywordService->isAskingSummary($question)) {
-                $summary = $this->keywordService->summarizeConversation($user, $question, $this->openRouterService);
-                $this->pushHistory($user, $question, $summary);
+            if (($plan['route'] ?? '') === 'summary') {
+                $summary = $this->keywordService->isAskingSummary($question)
+                    ? $this->summarizeConversation($user, $question)
+                    : 'Belum ada percakapan yang bisa diringkas.';
 
-                $aiLogId = $this->logAi($user, $question, $summary, 'summarize', 'session');
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'summarize',
-                    actionData: json_encode(['question' => $question], JSON_UNESCAPED_UNICODE),
-                    result: 'success'
-                );
+                $reply = $warning . $summary;
+                $this->pushHistory($user, $question, $reply);
+                $aiLogId = $this->logAi($user, $question, $reply, 'summarize', 'session');
+                $this->logAction($aiLogId, 'summarize', ['question' => $question], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
-                    'reply' => $warning . $summary,
+                    'reply' => $reply,
                     'action' => 'summarize',
                     'blocked' => false,
                     'source' => 'session',
@@ -188,17 +100,16 @@ class LogicAIforAdmin
                 ]);
             }
 
-            if ($this->keywordService->detectSelfQuery($question)) {
+            if (($plan['route'] ?? '') === 'system') {
+                $result = $this->handleSystemCommand($user, $question, $warning);
+                return $result;
+            }
+
+            if (($plan['route'] ?? '') === 'self') {
                 $reply = $warning . $this->keywordService->handleSelfQuery($question, $user, $role);
                 $this->pushHistory($user, $question, $reply);
-
                 $aiLogId = $this->logAi($user, $question, $reply, 'self_query', 'rule');
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'self_query',
-                    actionData: json_encode(['question' => $question], JSON_UNESCAPED_UNICODE),
-                    result: 'success'
-                );
+                $this->logAction($aiLogId, 'self_query', ['question' => $question], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
@@ -211,17 +122,11 @@ class LogicAIforAdmin
                 ]);
             }
 
-            if ($this->keywordService->detectBotQuery($question)) {
+            if (($plan['route'] ?? '') === 'bot') {
                 $reply = $warning . $this->keywordService->handleBotQuery($question);
                 $this->pushHistory($user, $question, $reply);
-
                 $aiLogId = $this->logAi($user, $question, $reply, 'bot_query', 'rule');
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'bot_query',
-                    actionData: json_encode(['question' => $question], JSON_UNESCAPED_UNICODE),
-                    result: 'success'
-                );
+                $this->logAction($aiLogId, 'bot_query', ['question' => $question], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
@@ -234,17 +139,11 @@ class LogicAIforAdmin
                 ]);
             }
 
-            if ($this->keywordService->isAskingTime($question)) {
+            if (($plan['route'] ?? '') === 'time') {
                 $reply = $warning . $this->keywordService->handleTimeQuery();
                 $this->pushHistory($user, $question, $reply);
-
                 $aiLogId = $this->logAi($user, $question, $reply, 'time_query', 'rule');
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'time_query',
-                    actionData: json_encode(['question' => $question], JSON_UNESCAPED_UNICODE),
-                    result: 'success'
-                );
+                $this->logAction($aiLogId, 'time_query', ['question' => $question], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
@@ -257,118 +156,62 @@ class LogicAIforAdmin
                 ]);
             }
 
-            $overview = $this->snapshotService->overview();
-            $snapshot = $this->buildSystemContext($context, $overview);
+            if (($plan['route'] ?? '') === 'campus') {
+                $trusted = $this->trustedWebsiteService->answerFromTrustedWebsite($question, $this->openRouterService);
 
-            $content = $this->openRouterService->chat(
-                [
-                    ['role' => 'system', 'content' => $this->buildSystemPrompt($antiMode, $needsApproval, $canWriteDirectly)],
-                    ['role' => 'user', 'content' => $this->buildUserPrompt($question, $snapshot, $contextDetect)],
-                ],
-                'deepseek/deepseek-chat',
-                60,
-                700,
-                0.2
-            );
+                if (! $trusted) {
+                    $trusted = [
+                        'reply' => $this->answerFromCampusConfig($question),
+                        'source' => 'campus_config',
+                        'confidence' => 0.8,
+                    ];
+                }
 
-            if (! $content) {
-                $reply = $warning . $this->keywordService->fallbackReply($question, ['action' => 'analyze']);
-                $aiLogId = $this->logAi($user, $question, $reply, 'fallback', 'openrouter_fail');
-
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: 'ai_request',
-                    actionData: json_encode(['reason' => 'openrouter_empty_response'], JSON_UNESCAPED_UNICODE),
-                    result: 'failed'
-                );
-
+                $reply = $warning . ($trusted['reply'] ?? 'Informasi tidak tersedia.');
                 $this->pushHistory($user, $question, $reply);
+                $aiLogId = $this->logAi($user, $question, $reply, 'trusted_website', $trusted['source'] ?? 'campus_config');
+                $this->logAction($aiLogId, 'trusted_website', [
+                    'question' => $question,
+                    'source' => $trusted['source'] ?? 'campus_config',
+                ], 'success');
 
                 return $this->normalizeResult([
                     'ok' => true,
                     'reply' => $reply,
-                    'action' => 'fallback',
+                    'action' => 'trusted_website',
                     'blocked' => false,
-                    'source' => 'openrouter_fail',
-                    'confidence' => 0.45,
+                    'source' => $trusted['source'] ?? 'campus_config',
+                    'confidence' => (float) ($trusted['confidence'] ?? 0.8),
                     'needs_confirmation' => false,
                 ]);
             }
 
-            $parsed = $this->parseJsonSafe($content);
-
-            $reply = trim((string) data_get($parsed, 'reply', ''));
-            $action = trim((string) data_get($parsed, 'action', 'analyze'));
-            $recommendation = trim((string) data_get($parsed, 'recommendation', ''));
-            $reason = trim((string) data_get($parsed, 'reason', ''));
-            $source = trim((string) data_get($parsed, 'source', 'openrouter'));
-            $confidence = $this->normalizeConfidence(data_get($parsed, 'confidence', 0.75));
-            $needsConfirmation = (bool) data_get($parsed, 'needs_confirmation', false);
-
-            if ($reply === '') {
-                $reply = $this->keywordService->fallbackReply($question, ['action' => 'analyze']);
+            if (($plan['route'] ?? '') === 'crud') {
+                return $this->handleCrudPlan($user, $question, $plan, $role, $warning);
             }
 
-            $isWriteAction = $this->keywordService->isWriteAction($action);
-
-            if ($antiMode && $isWriteAction) {
-                $reply = $this->keywordService->blockedReply($action, true, false);
-                $action = 'blocked';
-                $needsConfirmation = false;
-                $source = 'policy';
+            if (($plan['route'] ?? '') === 'read') {
+                return $this->handleReadPlan($user, $question, $plan, $role, $warning);
             }
 
-            if ($needsApproval && $isWriteAction) {
-                if ($reply === '') {
-                    $reply = $this->keywordService->approvalReply($action);
-                }
+            if (($plan['route'] ?? '') === 'contact') {
+                $reply = $warning . 'Pesan dan kritik dapat dipantau melalui notifikasi atau modul kontak yang tersedia di sistem.';
+                $this->pushHistory($user, $question, $reply);
+                $aiLogId = $this->logAi($user, $question, $reply, 'contact', 'rule');
+                $this->logAction($aiLogId, 'contact', ['question' => $question], 'success');
 
-                $needsConfirmation = true;
-                $source = 'approval';
+                return $this->normalizeResult([
+                    'ok' => true,
+                    'reply' => $reply,
+                    'action' => 'contact',
+                    'blocked' => false,
+                    'source' => 'rule',
+                    'confidence' => 1,
+                    'needs_confirmation' => false,
+                ]);
             }
 
-            if ($canWriteDirectly && $isWriteAction) {
-                $needsConfirmation = false;
-                if ($reply === '') {
-                    $reply = 'Aksi CRUD dapat dijalankan langsung.';
-                }
-                $source = 'direct';
-            }
-
-            $aiLogId = $this->logAi($user, $question, $reply, $action, $source);
-            $this->logAction(
-                aiLogId: $aiLogId,
-                actionType: $action,
-                actionData: json_encode([
-                    'question' => $question,
-                    'recommendation' => $recommendation,
-                    'reason' => $reason,
-                    'confidence' => $confidence,
-                    'needs_confirmation' => $needsConfirmation,
-                    'anti_mode' => $antiMode,
-                    'write_permission' => $canWrite,
-                ], JSON_UNESCAPED_UNICODE),
-                result: 'success'
-            );
-
-            if ($recommendation !== '' && ! empty($context['ticket_id'])) {
-                $this->storeRecommendation($context['ticket_id'], $recommendation, $reason);
-            }
-
-            $this->putCache($this->makeCacheKey($question, $antiMode, $canWrite, $context), $question, $reply, $source);
-            $this->pushHistory($user, $question, $reply);
-
-            return $this->normalizeResult([
-                'ok' => true,
-                'reply' => $reply,
-                'action' => $action,
-                'blocked' => false,
-                'source' => $source,
-                'recommendation' => $recommendation,
-                'reason' => $reason,
-                'confidence' => $confidence,
-                'needs_confirmation' => $needsConfirmation,
-            ]);
+            return $this->handleFallback($user, $question, $plan, $warning);
         } catch (Throwable $e) {
             logger()->error('AI ADMIN ERROR', [
                 'message' => $e->getMessage(),
@@ -379,7 +222,7 @@ class LogicAIforAdmin
 
             return $this->normalizeResult([
                 'ok' => true,
-                'reply' => $this->keywordService->fallbackReply($question, ['action' => 'analyze']),
+                'reply' => 'Maaf, saya belum dapat memproses permintaan tersebut.',
                 'action' => 'error',
                 'blocked' => false,
                 'source' => 'exception_fallback',
@@ -389,42 +232,115 @@ class LogicAIforAdmin
         }
     }
 
-    protected function handleCrudAction(
-        $user,
-        string $question,
-        array $context,
-        string $role,
-        string $entity,
-        string $operation,
-        bool $antiMode,
-        bool $needsApproval,
-        bool $canWriteDirectly,
-        string $warning = ''
-    ): array {
-        $crud = $this->buildCrudPayload($question, $context, $entity, $operation);
-        $operation = mb_strtolower(trim($operation));
-        $entity = mb_strtolower(trim($entity));
+    protected function handleReadPlan($user, string $question, array $plan, string $role, string $warning): array
+    {
+        $entity = $plan['entity'] ?? null;
 
-        if ($antiMode) {
-            $reply = $this->keywordService->blockedReply($operation, true, false);
+        if (! $entity) {
+            return $this->handleFallback($user, $question, $plan, $warning);
+        }
 
-            $aiLogId = $this->logAi($user, $question, $reply, 'blocked', 'policy');
-            $this->logAction(
-                aiLogId: $aiLogId,
-                actionType: $operation . '_' . $entity,
-                actionData: json_encode([
-                    'question' => $question,
-                    'entity' => $entity,
-                    'operation' => $operation,
-                    'reason' => 'anti_ai_mode',
-                ], JSON_UNESCAPED_UNICODE),
-                result: 'blocked'
-            );
+        $payload = [
+            'target' => $plan['target'] ?? [],
+            'filters' => $plan['filters'] ?? [],
+        ];
+
+        if (! empty($payload['filters']['today']) && $entity === 'tickets') {
+            $payload['filters']['limit'] = 10;
+        }
+
+        $execution = $this->crudExecutorService->execute('read', $entity, $payload);
+
+        if (($execution['status'] ?? '') === 'ambiguous') {
+            $reply = $warning . $this->formatAmbiguousMatches($entity, $execution['matches'] ?? []);
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, 'read_' . $entity, 'selection_needed');
+            $this->logAction($aiLogId, 'read_' . $entity, [
+                'question' => $question,
+                'payload' => $payload,
+                'matches' => $execution['matches'] ?? [],
+            ], 'failed');
 
             return $this->normalizeResult([
-                'ok' => true,
-                'reply' => $warning . $reply,
-                'action' => 'blocked',
+                'ok' => false,
+                'reply' => $reply,
+                'action' => 'read_' . $entity,
+                'blocked' => false,
+                'source' => 'selection_needed',
+                'confidence' => 0.55,
+                'needs_confirmation' => true,
+            ]);
+        }
+
+        if (($execution['ok'] ?? false) === false) {
+            $reply = $warning . ($execution['message'] ?? 'Data tidak ditemukan.');
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, 'read_' . $entity, 'not_found');
+            $this->logAction($aiLogId, 'read_' . $entity, [
+                'question' => $question,
+                'payload' => $payload,
+            ], 'failed');
+
+            return $this->normalizeResult([
+                'ok' => false,
+                'reply' => $reply,
+                'action' => 'read_' . $entity,
+                'blocked' => false,
+                'source' => 'not_found',
+                'confidence' => 0.45,
+                'needs_confirmation' => false,
+            ]);
+        }
+
+        $rows = $execution['rows'] ?? [];
+        $reply = $warning . $this->formatRows($entity, $rows, $plan['filters'] ?? []);
+        $this->pushHistory($user, $question, $reply);
+        $aiLogId = $this->logAi($user, $question, $reply, 'read_' . $entity, 'database');
+        $this->logAction($aiLogId, 'read_' . $entity, [
+            'question' => $question,
+            'payload' => $payload,
+            'result_count' => count($rows),
+        ], 'success');
+
+        try {
+            $this->traceService->syncTicketRecommendations($entity, 'read', $execution, $plan, $question, 'database');
+        } catch (Throwable $e) {
+            logger()->warning('AI trace sync failed on read', [
+                'entity' => $entity,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        return $this->normalizeResult([
+            'ok' => true,
+            'reply' => $reply,
+            'action' => 'read_' . $entity,
+            'blocked' => false,
+            'source' => 'database',
+            'confidence' => 0.9,
+            'needs_confirmation' => false,
+        ]);
+    }
+
+    protected function handleCrudPlan($user, string $question, array $plan, string $role, string $warning): array
+    {
+        $entity = $plan['entity'] ?? null;
+        $operation = $plan['operation'] ?? 'analyze';
+
+        if (! $entity) {
+            return $this->handleFallback($user, $question, $plan, $warning);
+        }
+
+        if ($operation === 'delete' && $this->crudPlanService->isMassDelete($plan, $question)) {
+            $reply = $warning . 'Permintaan hapus massal diblokir. Kirim ID target yang spesifik.';
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, 'blocked_delete', 'policy');
+            $this->logAction($aiLogId, 'blocked_delete', ['question' => $question, 'plan' => $plan], 'blocked');
+
+            return $this->normalizeResult([
+                'ok' => false,
+                'reply' => $reply,
+                'action' => 'blocked_delete',
                 'blocked' => true,
                 'source' => 'policy',
                 'confidence' => 1,
@@ -432,26 +348,26 @@ class LogicAIforAdmin
             ]);
         }
 
-        if (in_array($operation, ['create', 'update'], true) && empty($crud['data'])) {
-            $reply = $this->buildMissingDataReply($entity, $operation);
+        $crud = [
+            'data' => $plan['data'] ?? [],
+            'target' => $plan['target'] ?? [],
+            'filters' => $plan['filters'] ?? [],
+        ];
 
-            $aiLogId = $this->logAi($user, $question, $reply, 'needs_data', 'rule');
-            $this->logAction(
-                aiLogId: $aiLogId,
-                actionType: $operation . '_' . $entity,
-                actionData: json_encode([
-                    'question' => $question,
-                    'entity' => $entity,
-                    'operation' => $operation,
-                    'reason' => 'data_missing',
-                    'crud' => $crud,
-                ], JSON_UNESCAPED_UNICODE),
-                result: 'failed'
-            );
+        $execution = $this->crudExecutorService->execute($operation, $entity, $crud);
+
+        if (($execution['status'] ?? '') === 'missing_fields') {
+            $reply = $warning . ($execution['message'] ?? $this->buildMissingDataReply($entity, $operation));
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'data_missing');
+            $this->logAction($aiLogId, $operation . '_' . $entity, [
+                'question' => $question,
+                'crud' => $crud,
+            ], 'failed');
 
             return $this->normalizeResult([
                 'ok' => false,
-                'reply' => $warning . $reply,
+                'reply' => $reply,
                 'action' => $operation . '_' . $entity,
                 'blocked' => false,
                 'source' => 'data_missing',
@@ -460,379 +376,241 @@ class LogicAIforAdmin
             ]);
         }
 
-        if ($needsApproval) {
-            $snapshot = $this->snapshotService->entity($entity, 10, ['role' => $role]);
-
-            $reply = $this->generateWriteActionReply(
-                user: $user,
-                question: $question,
-                entity: $entity,
-                operation: $operation,
-                snapshot: $snapshot,
-                warning: $warning,
-                needsApproval: true,
-                antiMode: false
-            );
-
-            $reply .= "\n\nDraft CRUD:\n" . $this->safeJson($crud);
-
-            $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'draft');
-            $this->logAction(
-                aiLogId: $aiLogId,
-                actionType: $operation . '_' . $entity,
-                actionData: json_encode([
-                    'question' => $question,
-                    'entity' => $entity,
-                    'operation' => $operation,
-                    'mode' => 'approval',
-                    'crud' => $crud,
-                ], JSON_UNESCAPED_UNICODE),
-                result: 'success'
-            );
-
+        if (($execution['status'] ?? '') === 'ambiguous') {
+            $reply = $warning . $this->formatAmbiguousMatches($entity, $execution['matches'] ?? []);
             $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'selection_needed');
+            $this->logAction($aiLogId, $operation . '_' . $entity, [
+                'question' => $question,
+                'crud' => $crud,
+                'matches' => $execution['matches'] ?? [],
+            ], 'failed');
 
             return $this->normalizeResult([
-                'ok' => true,
+                'ok' => false,
                 'reply' => $reply,
                 'action' => $operation . '_' . $entity,
                 'blocked' => false,
-                'source' => 'approval',
-                'confidence' => 0.8,
+                'source' => 'selection_needed',
+                'confidence' => 0.55,
                 'needs_confirmation' => true,
             ]);
         }
 
-        if ($canWriteDirectly) {
-            $execution = $this->crudExecutorService->execute($operation, $entity, $crud);
+        $reply = $warning . ($execution['message'] ?? 'Selesai.');
+        $this->pushHistory($user, $question, $reply);
+        $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'direct');
+        $this->logAction($aiLogId, $operation . '_' . $entity, [
+            'question' => $question,
+            'crud' => $crud,
+            'result' => $execution,
+        ], ($execution['ok'] ?? false) ? 'success' : 'failed');
 
-            if (($execution['status'] ?? '') === 'ambiguous') {
-                $reply = $warning . $this->formatCrudAmbiguity($entity, $operation, $execution['matches'] ?? []);
-
-                $aiLogId = $this->logAi($user, $question, $reply, 'needs_selection', 'direct');
-                $this->logAction(
-                    aiLogId: $aiLogId,
-                    actionType: $operation . '_' . $entity,
-                    actionData: json_encode([
-                        'question' => $question,
-                        'entity' => $entity,
-                        'operation' => $operation,
-                        'crud' => $crud,
-                        'matches' => $execution['matches'] ?? [],
-                    ], JSON_UNESCAPED_UNICODE),
-                    result: 'failed'
-                );
-
-                return $this->normalizeResult([
-                    'ok' => false,
-                    'reply' => $reply,
-                    'action' => $operation . '_' . $entity,
-                    'blocked' => false,
-                    'source' => 'selection_needed',
-                    'confidence' => 0.55,
-                    'needs_confirmation' => true,
-                ]);
-            }
-
-            $reply = $warning . ($execution['message'] ?? 'Selesai.');
-
-            $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'direct');
-            $this->logAction(
-                aiLogId: $aiLogId,
-                actionType: $operation . '_' . $entity,
-                actionData: json_encode([
-                    'question' => $question,
+        if (($execution['ok'] ?? false) === true) {
+            try {
+                $this->traceService->syncTicketRecommendations($entity, $operation, $execution, $plan, $question, 'direct');
+            } catch (Throwable $e) {
+                logger()->warning('AI trace sync failed on direct action', [
                     'entity' => $entity,
                     'operation' => $operation,
-                    'mode' => 'direct',
-                    'crud' => $crud,
-                    'result' => $execution,
-                ], JSON_UNESCAPED_UNICODE),
-                result: ($execution['ok'] ?? false) ? 'success' : 'failed'
-            );
-
-            $this->pushHistory($user, $question, $reply);
-
-            return $this->normalizeResult([
-                'ok' => (bool) ($execution['ok'] ?? false),
-                'reply' => $reply,
-                'action' => $operation . '_' . $entity,
-                'blocked' => false,
-                'source' => 'direct',
-                'confidence' => ($execution['ok'] ?? false) ? 1 : 0.4,
-                'needs_confirmation' => false,
-            ]);
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         return $this->normalizeResult([
-            'ok' => false,
-            'reply' => 'Mode write tidak bisa dijalankan.',
+            'ok' => (bool) ($execution['ok'] ?? false),
+            'reply' => $reply,
             'action' => $operation . '_' . $entity,
-            'blocked' => true,
-            'source' => 'policy',
-            'confidence' => 0.2,
+            'blocked' => false,
+            'source' => 'direct',
+            'confidence' => (bool) ($execution['ok'] ?? false) ? 1 : 0.4,
             'needs_confirmation' => false,
         ]);
     }
 
-    protected function buildCrudPayload(string $question, array $context, ?string $entity = null, ?string $operation = null): array
+    protected function handleSystemCommand($user, string $question, string $warning): array
     {
-        $crud = [];
+        $parsed = $this->systemControlService->parseCommand($question);
 
-        if (isset($context['crud']) && is_array($context['crud'])) {
-            $crud = $context['crud'];
+        if (($parsed['action'] ?? 'unknown') === 'unknown') {
+            $reply = $warning . 'Perintah sistem tidak dikenali.';
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, 'system_unknown', 'rule');
+            $this->logAction($aiLogId, 'system_unknown', ['question' => $question, 'parsed' => $parsed], 'failed');
+
+            return $this->normalizeResult([
+                'ok' => false,
+                'reply' => $reply,
+                'action' => 'system_unknown',
+                'blocked' => false,
+                'source' => 'validator',
+                'confidence' => 0.45,
+                'needs_confirmation' => false,
+            ]);
         }
 
-        $parsed = $this->extractCrudPayload($question, $entity, $operation);
-        $crud = array_replace_recursive($parsed, $crud);
-        $crud = $this->normalizeCrudPayload($crud, $entity, $operation);
+        if (($parsed['action'] ?? '') === 'list_features') {
+            $message = $this->systemControlService->getSystemSettingFeatureText();
 
-        return $crud;
+            $reply = $warning . $message;
+            $this->pushHistory($user, $question, $reply);
+
+            $aiLogId = $this->logAi($user, $question, $reply, 'list_system_settings', 'rule');
+            $this->logAction($aiLogId, 'list_system_settings', [
+                'question' => $question,
+                'parsed' => $parsed,
+            ], 'success');
+
+            return $this->normalizeResult([
+                'ok' => true,
+                'reply' => $reply,
+                'action' => 'list_system_settings',
+                'blocked' => false,
+                'source' => 'system',
+                'confidence' => 0.98,
+                'needs_confirmation' => false,
+            ]);
+        }
+
+        $execution = $this->systemControlService->executeCommand($question);
+        $reply = $warning . ($execution['message'] ?? 'Selesai.');
+
+        $this->pushHistory($user, $question, $reply);
+        $aiLogId = $this->logAi($user, $question, $reply, $execution['type'] ?? 'system', 'direct');
+        $this->logAction($aiLogId, $execution['type'] ?? 'system', [
+            'question' => $question,
+            'parsed' => $parsed,
+            'execution' => $execution,
+        ], ($execution['ok'] ?? false) ? 'success' : 'failed');
+
+        return $this->normalizeResult([
+            'ok' => (bool) ($execution['ok'] ?? false),
+            'reply' => $reply,
+            'action' => $execution['type'] ?? 'system',
+            'blocked' => false,
+            'source' => 'system',
+            'confidence' => 0.98,
+            'needs_confirmation' => false,
+        ]);
     }
 
-    protected function normalizeCrudPayload(array $crud, ?string $entity = null, ?string $operation = null): array
+    protected function handleFallback($user, string $question, array $plan, string $warning): array
     {
-        $crud['data'] = isset($crud['data']) && is_array($crud['data']) ? $crud['data'] : [];
-        $crud['target'] = isset($crud['target']) && is_array($crud['target']) ? $crud['target'] : [];
+        $reply = $warning . $this->generateAnswerWithAI($user, $question, $plan);
+        $this->pushHistory($user, $question, $reply);
+        $aiLogId = $this->logAi($user, $question, $reply, 'analyze', 'openrouter');
+        $this->logAction($aiLogId, 'analyze', ['question' => $question, 'plan' => $plan], 'success');
 
-        if (isset($crud['id']) && is_numeric($crud['id'])) {
-            $crud['id'] = (int) $crud['id'];
-            $crud['target']['id'] = $crud['id'];
-            unset($crud['data']['id']);
-        }
-
-        foreach (['data', 'target'] as $bucket) {
-            foreach ($crud[$bucket] as $k => $v) {
-                if (is_string($v)) {
-                    $v = trim($v);
-                }
-
-                if ($v === '') {
-                    unset($crud[$bucket][$k]);
-                    continue;
-                }
-
-                if (isset($this->crudFieldAliases()[$k])) {
-                    $k = $this->crudFieldAliases()[$k];
-                }
-
-                if (is_string($v) && is_numeric($v)) {
-                    $v = str_contains($v, '.') ? (float) $v : (int) $v;
-                }
-
-                $crud[$bucket][$k] = $v;
-            }
-        }
-
-        if (($operation ?? '') === 'create') {
-            unset($crud['target']['id'], $crud['data']['id']);
-        }
-
-        if (in_array(($operation ?? ''), ['update', 'delete'], true) && empty($crud['target'])) {
-            foreach ($this->likelyTargetFields($entity) as $field) {
-                if (isset($crud['data'][$field])) {
-                    $crud['target'][$field] = $crud['data'][$field];
-                    unset($crud['data'][$field]);
-                    break;
-                }
-            }
-        }
-
-        if (empty($crud['target']) && isset($crud['data']['id']) && is_numeric($crud['data']['id'])) {
-            $crud['target']['id'] = (int) $crud['data']['id'];
-            unset($crud['data']['id']);
-        }
-
-        return $crud;
+        return $this->normalizeResult([
+            'ok' => true,
+            'reply' => $reply,
+            'action' => 'analyze',
+            'blocked' => false,
+            'source' => 'openrouter',
+            'confidence' => 0.6,
+            'needs_confirmation' => false,
+        ]);
     }
 
-    protected function crudFieldAliases(): array
+    protected function recheckDataRoute(string $question, array $plan): array
     {
-        return [
-            'nama' => 'name',
-            'deskripsi' => 'description',
-            'pengembang' => 'developer',
-            'versi' => 'version',
-            'estimasi_menit' => 'estimated_minutes',
-            'menit_estimasi' => 'estimated_minutes',
-            'judul' => 'title',
-            'pesan' => 'message',
-            'komentar' => 'comment',
-            'aktif' => 'is_active',
-            'status_baca' => 'is_read',
-        ];
+        $entity = $plan['entity'] ?? null;
+        $m = mb_strtolower($question);
+        $hasDataSignal = (bool) preg_match('/\b(data|tampilkan|lihat|daftar|cari|cek|detail|apakah ada|ada|rekap|ticket|tiket|user|pengguna|software|role|perbaikan|penginstalan|login log|ai log|ai task|ai recommendation|notification|notifikasi)\b/u', $m);
+
+        if (($plan['route'] ?? '') === 'time' && ($entity || $hasDataSignal)) {
+            $plan['intent'] = $this->operationToIntentForPlan('read', $entity);
+            $plan['operation'] = 'read';
+            $plan['route'] = 'read';
+            $plan['source'] = 'route_override';
+            $plan['confidence'] = max((float) ($plan['confidence'] ?? 0.4), 0.9);
+            $plan['needs_clarification'] = false;
+
+            if (empty($plan['filters']['limit'])) {
+                $plan['filters']['limit'] = 10;
+            }
+        }
+
+        return $plan;
     }
 
-    protected function extractCrudPayload(string $question, ?string $entity = null, ?string $operation = null): array
+    protected function operationToIntentForPlan(string $operation, ?string $entity): string
     {
-        $text = trim($question);
-        $operation = mb_strtolower(trim((string) $operation));
-        $entity = mb_strtolower(trim((string) $entity));
-
-        $data = [];
-        $target = [];
-        $id = null;
-
-        if (preg_match_all(
-            "/(?:'?(?<key>[a-zA-Z_][a-zA-Z0-9_]*)'?\s*(?:=>|:|=)\s*'?(?<value>[^,\n]+?)'?(?=,|\n|$))/u",
-            $text,
-            $matches,
-            PREG_SET_ORDER
-        )) {
-            foreach ($matches as $match) {
-                $key = mb_strtolower(trim($match['key']));
-                $value = trim($match['value']);
-                $value = trim($value, " \t\n\r\0\x0B\"'");
-
-                if ($key === '' || $value === '') {
-                    continue;
-                }
-
-                if (isset($this->crudFieldAliases()[$key])) {
-                    $key = $this->crudFieldAliases()[$key];
-                }
-
-                if (is_numeric($value)) {
-                    $value = str_contains($value, '.') ? (float) $value : (int) $value;
-                }
-
-                if ($key === 'id') {
-                    $id = $value;
-                    $target['id'] = $value;
-                    continue;
-                }
-
-                if (in_array($operation, ['update', 'delete'], true) && in_array($key, $this->likelyTargetFields($entity), true)) {
-                    $target[$key] = $value;
-                    continue;
-                }
-
-                $data[$key] = $value;
-            }
-        }
-
-        $targetHints = $this->extractTargetHints($text, $entity);
-
-        foreach ($targetHints as $k => $v) {
-            if (isset($this->crudFieldAliases()[$k])) {
-                $k = $this->crudFieldAliases()[$k];
-            }
-
-            if ($k === 'id') {
-                $id = is_numeric($v) ? (int) $v : $v;
-                $target['id'] = $id;
-                continue;
-            }
-
-            if (in_array($operation, ['update', 'delete'], true)) {
-                $target[$k] = $v;
-            }
-        }
-
-        if ($operation === 'create') {
-            unset($data['id'], $target['id']);
-        }
-
-        return [
-            'id' => $id,
-            'data' => $data,
-            'target' => $target,
-            'lookup' => $target,
-        ];
-    }
-
-    protected function extractTargetHints(string $text, ?string $entity = null): array
-    {
-        $m = mb_strtolower($text);
-        $out = [];
-
-        $patterns = [
-            'id' => [
-                '/\b(?:id|record\s*id|data\s*id)\s*[:=]?\s*(\d+)\b/u',
-            ],
-            'name' => [
-                '/\b(?:nama|name)\s*[:=]?\s*([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u',
-            ],
-            'username' => [
-                '/\busername\s*[:=]?\s*([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u',
-            ],
-            'ticket_number' => [
-                '/\bticket\s*number\s*[:=]?\s*([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u',
-            ],
-            'url' => [
-                '/\burl\s*[:=]?\s*([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u',
-            ],
-            'key' => [
-                '/\bkey\s*[:=]?\s*([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u',
-            ],
-        ];
-
-        foreach ($patterns as $field => $list) {
-            foreach ($list as $pattern) {
-                if (preg_match($pattern, $m, $match)) {
-                    $value = trim($match[1], " \t\n\r\0\x0B\"'");
-                    if ($value !== '') {
-                        $out[$field] = is_numeric($value) ? ((string) (int) $value === $value ? (int) $value : $value) : $value;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if ($entity === 'software' && ! isset($out['name'])) {
-            if (preg_match('/\b(?:dengan\s+)?nama\s+([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u', $m, $match)) {
-                $value = trim($match[1], " \t\n\r\0\x0B\"'");
-                if ($value !== '') {
-                    $out['name'] = $value;
-                }
-            }
-        }
-
-        if ($entity === 'users' && ! isset($out['name'])) {
-            if (preg_match('/\b(?:dengan\s+)?nama\s+([^\n,]+?)(?=\s+(?:menjadi|jadi|ubah|ganti|update|hapus|delete|perbarui|set|to)\b|$|,)/u', $m, $match)) {
-                $value = trim($match[1], " \t\n\r\0\x0B\"'");
-                if ($value !== '') {
-                    $out['name'] = $value;
-                }
-            }
-        }
-
-        return $out;
-    }
-
-    protected function likelyTargetFields(?string $entity): array
-    {
-        return match (mb_strtolower(trim((string) $entity))) {
-            'software' => ['id', 'name', 'developer', 'version'],
-            'users' => ['id', 'username', 'email', 'nim', 'nip', 'name'],
-            'tickets' => ['id', 'ticket_number'],
-            'roles' => ['id', 'name'],
-            'trusted_websites' => ['id', 'name', 'url'],
-            'perbaikans' => ['id', 'item_name'],
-            'penginstalans' => ['id'],
-            'login_logs' => ['id'],
-            'ai_tasks' => ['id', 'task_name'],
-            'ai_recommendations' => ['id'],
-            'notifications' => ['id', 'title'],
-            'maintenances' => ['id'],
-            'system_settings' => ['id', 'key'],
-            'rekaps' => ['id', 'rekap_date'],
-            'vercel_sync_logs' => ['id'],
-            'ticket_status_logs' => ['id', 'ticket_id'],
-            'ticket_comments' => ['id', 'ticket_id'],
-            default => ['id', 'name', 'title', 'username', 'ticket_number', 'url', 'task_name'],
-        };
-    }
-
-    protected function buildMissingTargetReply(string $entity, string $operation): string
-    {
-        $label = $this->actionService->label($entity);
-
         return match ($operation) {
-            'update' => "Saya perlu target data {$label} yang lebih spesifik. Kirim ID atau nama yang tepat.",
-            'delete' => "Saya perlu target data {$label} yang lebih spesifik sebelum hapus. Kirim ID atau detail pembeda.",
-            default  => "Target data {$label} belum jelas.",
+            'create' => 'crud.create',
+            'update' => 'crud.update',
+            'delete' => 'crud.delete',
+            'restore' => 'crud.restore',
+            'read', 'search', 'list' => 'crud.read',
+            default => 'analyze',
         };
+    }
+
+    public function generateAnswerWithAI($user, string $message, array $plan = []): string
+    {
+        $historyKey = 'chat_history_' . data_get($user, 'id');
+        $history = Session::get($historyKey, []);
+        $recent = array_slice($history, -5);
+
+        $context = '';
+        foreach ($recent as $h) {
+            $context .= 'User: ' . ($h['in'] ?? '') . "\nBot: " . ($h['out'] ?? '') . "\n";
+        }
+
+        $role = $this->resolveRoleName($user);
+        $overview = $this->snapshotService->overview();
+
+        $system = "
+Anda adalah asisten teknis resmi STMIK Triguna Dharma.
+
+Aturan:
+- Role user saat ini: {$role}
+- Jangan mengarang status, tanggal, atau data.
+- Jika data resmi tersedia di snapshot, utamakan data tersebut.
+- Jika pertanyaan meminta data spesifik, jangan jawab umum.
+- Jika informasi kurang, minta detail yang diperlukan.
+- Untuk permintaan sistem, ikuti state sistem yang ada; jangan menebak.
+- Jawab singkat, jelas, dan langsung ke inti.
+";
+
+        $userPrompt = json_encode([
+            'question' => $message,
+            'plan' => $plan,
+            'recent_context' => $context,
+            'system_snapshot' => $overview,
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        $resp = $this->openRouterService->chat([
+            ['role' => 'system', 'content' => $system],
+            ['role' => 'user', 'content' => $userPrompt],
+        ], 'deepseek/deepseek-chat', 30, 600, 0.2);
+
+        if (! $resp) {
+            return $this->keywordService->fallbackReply($message, ['action' => $plan['operation'] ?? 'analyze']);
+        }
+
+        return trim($resp);
+    }
+
+    protected function answerFromCampusConfig(string $question): string
+    {
+        $campus = config('jenis.datastmik', []);
+        $m = mb_strtolower($question);
+
+        if (preg_match('/\b(alamat|lokasi|dimana)\b/u', $m)) {
+            return 'Alamat kampus: ' . data_get($campus, 'profil.alamat', data_get($campus, 'kontak.alamat', 'informasi tidak tersedia.'));
+        }
+
+        if (preg_match('/\b(website|situs)\b/u', $m)) {
+            return 'Website resmi: ' . data_get($campus, 'profil.website', 'informasi tidak tersedia.');
+        }
+
+        if (preg_match('/\b(telepon|kontak|email)\b/u', $m)) {
+            return 'Kontak resmi: ' . data_get($campus, 'profil.telepon', data_get($campus, 'kontak.telepon', 'informasi tidak tersedia.')) . ' / ' . data_get($campus, 'profil.email', data_get($campus, 'kontak.email', 'informasi tidak tersedia.'));
+        }
+
+        return 'Informasi kampus resmi tersedia pada sumber terpercaya yang terhubung ke sistem.';
     }
 
     protected function buildMissingDataReply(string $entity, string $operation): string
@@ -842,362 +620,191 @@ class LogicAIforAdmin
         return match ($operation) {
             'create' => "Data {$label} belum lengkap. Kirim field yang mau disimpan.",
             'update' => "Data perubahan {$label} belum lengkap. Kirim field yang mau diubah.",
-            default  => "Data belum lengkap.",
+            'delete' => "Target data {$label} belum jelas. Kirim ID atau pembeda yang tepat.",
+            'restore' => "Target data {$label} belum jelas. Kirim ID data yang ingin dipulihkan.",
+            default => "Data {$label} belum lengkap.",
         };
     }
 
-    protected function formatCrudAmbiguity(string $entity, string $operation, array $matches): string
+    protected function formatRows(string $entity, array $rows, array $filters = []): string
+    {
+        if (empty($rows)) {
+            return 'Data tidak ditemukan.';
+        }
+
+        $count = count($rows);
+
+        if ($count === 1) {
+            return $this->formatSingleRow($entity, (array) $rows[0]);
+        }
+
+        $lines = ["Ditemukan {$count} data " . $this->actionService->label($entity) . ':'];
+        $max = min($count, 10);
+
+        for ($i = 0; $i < $max; $i++) {
+            $lines[] = '- ' . $this->summarizeRow($entity, (array) $rows[$i]);
+        }
+
+        if ($count > 10) {
+            $lines[] = 'Hanya 10 data pertama yang ditampilkan.';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    protected function formatSingleRow(string $entity, array $row): string
+    {
+        $label = $this->actionService->label($entity);
+        $parts = [];
+
+        switch ($entity) {
+            case 'users':
+                $parts = [
+                    'id=' . ($row['id'] ?? '-'),
+                    'name=' . ($row['name'] ?? '-'),
+                    'username=' . ($row['username'] ?? '-'),
+                    'email=' . ($row['email'] ?? '-'),
+                    'role=' . ($row['role_name'] ?? $row['role_id'] ?? '-'),
+                    'status=' . $this->inferActiveText($row['is_active'] ?? null),
+                ];
+                break;
+            case 'roles':
+                $parts = [
+                    'id=' . ($row['id'] ?? '-'),
+                    'name=' . ($row['name'] ?? '-'),
+                    'description=' . ($row['description'] ?? '-'),
+                    'status=' . $this->inferActiveText($row['is_active'] ?? null),
+                ];
+                break;
+            case 'software':
+                $parts = [
+                    'id=' . ($row['id'] ?? '-'),
+                    'name=' . ($row['name'] ?? '-'),
+                    'developer=' . ($row['developer'] ?? '-'),
+                    'version=' . ($row['version'] ?? '-'),
+                    'estimated_minutes=' . ($row['estimated_minutes'] ?? '-'),
+                ];
+                break;
+            case 'tickets':
+                $parts = [
+                    'id=' . ($row['id'] ?? '-'),
+                    'ticket_number=' . ($row['ticket_number'] ?? '-'),
+                    'type=' . ($row['type'] ?? '-'),
+                    'status=' . ($row['status'] ?? '-'),
+                    'priority=' . ($row['priority'] ?? '-'),
+                    'user_id=' . ($row['user_id'] ?? '-'),
+                ];
+                break;
+            default:
+                foreach (['id','name','username','title','ticket_number','status','type','priority','message','description','created_at'] as $field) {
+                    if (isset($row[$field])) {
+                        $parts[] = $field . '=' . (is_scalar($row[$field]) ? $row[$field] : json_encode($row[$field], JSON_UNESCAPED_UNICODE));
+                    }
+                }
+                break;
+        }
+
+        return $label . ': ' . implode(', ', $parts);
+    }
+
+    protected function summarizeRow(string $entity, array $row): string
+    {
+        return match ($entity) {
+            'users' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['username'] ?? '-') . ' | ' . ($row['email'] ?? '-'),
+            'roles' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['description'] ?? '-'),
+            'software' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['developer'] ?? '-') . ' | ' . ($row['version'] ?? '-'),
+            'tickets' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['ticket_number'] ?? '-') . ' | ' . ($row['type'] ?? '-') . ' | ' . ($row['status'] ?? '-'),
+            'trusted_websites' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['url'] ?? '-'),
+            'rekaps' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['rekap_date'] ?? '-') . ' | inst=' . ($row['total_installations'] ?? '-') . ' rep=' . ($row['total_repairs'] ?? '-'),
+            default => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? $row['title'] ?? $row['ticket_number'] ?? $row['task_name'] ?? '-'),
+        };
+    }
+
+    protected function formatAmbiguousMatches(string $entity, array $matches): string
     {
         $label = $this->actionService->label($entity);
 
         if (empty($matches)) {
-            return "Ada lebih dari satu data {$label} yang cocok. Kirim ID atau detail pembeda.";
+            return "Ada lebih dari satu data {$label} yang cocok. Kirim ID yang lebih spesifik.";
         }
 
-        $lines = ["Ada lebih dari satu data {$label} yang cocok untuk {$operation}:"];
-        $max = min(count($matches), 5);
+        $lines = ["Ada lebih dari satu data {$label} yang cocok:"];
+        $max = min(count($matches), 10);
 
         for ($i = 0; $i < $max; $i++) {
-            $row = (array) $matches[$i];
-            $lines[] = '- ' . $this->summarizeMatchRow($entity, $row);
+            $lines[] = '- ' . $this->summarizeRow($entity, (array) $matches[$i]);
         }
 
-        $lines[] = 'Kirim ID atau detail pembeda supaya saya tidak salah record.';
+        $lines[] = 'Kirim ID atau pembeda yang lebih spesifik supaya saya tidak salah record.';
 
         return implode("\n", $lines);
     }
 
-    protected function summarizeMatchRow(string $entity, array $row): string
+    protected function inferActiveText(mixed $value): string
     {
-        return match ($entity) {
-            'software' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['developer'] ?? '-') . ' | ' . ($row['version'] ?? '-'),
-            'users' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['username'] ?? '-') . ' | ' . ($row['email'] ?? '-'),
-            'tickets' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['ticket_number'] ?? '-') . ' | ' . ($row['type'] ?? '-') . ' | ' . ($row['status'] ?? '-'),
-            'trusted_websites' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['url'] ?? '-'),
-            'roles' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['description'] ?? '-'),
-            default => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? $row['title'] ?? $row['ticket_number'] ?? '-'),
-        };
-    }
-
-    protected function generateEntityAnswer(
-        $user,
-        string $question,
-        string $entity,
-        string $operation,
-        array $snapshot,
-        string $warning = ''
-    ): string {
-        $system = <<<PROMPT
-Kamu adalah AI Admin TechNoteApp 2.0.
-Gunakan hanya data snapshot internal berikut.
-Jangan mengarang data.
-Jika data kurang, sebutkan bagian yang kurang.
-Jawab singkat, jelas, dan langsung ke inti.
-Kalau pertanyaan meminta daftar, tampilkan hanya data yang relevan.
-Output bebas, tetapi tetap singkat.
-
-Entity: {$entity}
-Operation: {$operation}
-Snapshot:
-{$this->safeJson($snapshot)}
-PROMPT;
-
-        $reply = $this->openRouterService->chat([
-            ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $question],
-        ], 'deepseek/deepseek-chat', 40, 700, 0.2);
-
-        if (! $reply) {
-            return $warning . $this->formatEntitySnapshotFallback($entity, $snapshot);
+        if ($value === null) {
+            return 'unknown';
         }
 
-        return $warning . trim($reply);
+        return (bool) $value ? 'active' : 'inactive';
     }
 
-    protected function generateWriteActionReply(
-        $user,
-        string $question,
-        string $entity,
-        string $operation,
-        array $snapshot,
-        string $warning = '',
-        bool $needsApproval = false,
-        bool $antiMode = false
-    ): string {
-        $modeText = $antiMode
-            ? 'ANTI AI MODE AKTIF. CRUD diblok total.'
-            : ($needsApproval
-                ? 'AI ADMIN PERMISSION AKTIF. Buat draft dan tandai bahwa persetujuan dibutuhkan.'
-                : 'AI ADMIN PERMISSION NONAKTIF. CRUD dapat dijalankan langsung tanpa konfirmasi.');
-
-        $system = <<<PROMPT
-Kamu adalah AI Admin TechNoteApp 2.0.
-Tugas: menanggapi aksi {$operation} untuk entity {$entity}.
-Jangan mengarang data.
-Gunakan snapshot berikut.
-Tampilkan:
-- ringkasan target
-- tindakan yang diminta
-- alasan singkat
-- risiko singkat
-- status izin/approval
-
-Mode: {$modeText}
-Snapshot:
-{$this->safeJson($snapshot)}
-PROMPT;
-
-        $reply = $this->openRouterService->chat([
-            ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $question],
-        ], 'deepseek/deepseek-chat', 40, 700, 0.2);
-
-        if (! $reply) {
-            if ($needsApproval) {
-                return $warning . "Draft {$operation} untuk {$this->actionService->label($entity)} sudah disiapkan. Persetujuan masih dibutuhkan sebelum diproses.";
-            }
-
-            return $warning . "Aksi {$operation} untuk {$this->actionService->label($entity)} sudah disiapkan dan dapat dijalankan langsung.";
-        }
-
-        return $warning . trim($reply);
-    }
-
-    protected function buildSystemContext(array $context, array $overview): array
+    protected function logAi($user, string $question, string $answer, string $action, string $source): int
     {
-        return [
-            'anti_mode' => $this->keywordService->isAntiAiModeEnabled(),
-            'needs_approval' => $this->keywordService->needsAiAdminApproval(),
-            'direct_write_allowed' => $this->keywordService->canAiWriteDirectly(),
-            'write_permission' => $this->keywordService->canAiWrite(),
-            'overview' => $overview,
-            'trusted_websites' => $this->snapshotService->entity('trusted_websites', 10),
-            'latest_entities' => [
-                'tickets' => $this->snapshotService->entity('tickets', 5),
-                'users' => $this->snapshotService->entity('users', 5),
-                'software' => $this->snapshotService->entity('software', 5),
-                'ai_logs' => $this->snapshotService->entity('ai_logs', 5),
-                'ai_tasks' => $this->snapshotService->entity('ai_tasks', 5),
-                'ai_recommendations' => $this->snapshotService->entity('ai_recommendations', 5),
-                'login_logs' => $this->snapshotService->entity('login_logs', 5),
-                'user_activities' => $this->snapshotService->entity('user_activities', 5),
-                'maintenances' => $this->snapshotService->entity('maintenances', 5),
-                'system_settings' => $this->snapshotService->entity('system_settings', 5),
-                'notifications' => $this->snapshotService->entity('notifications', 5),
-                'rekaps' => $this->snapshotService->entity('rekaps', 5),
-                'vercel_sync_logs' => $this->snapshotService->entity('vercel_sync_logs', 5),
-            ],
-            'extra' => $context,
-        ];
+        return $this->traceService->recordInteraction($user, $question, $answer, $action, $source);
     }
 
-    protected function buildSystemPrompt(bool $antiMode, bool $needsApproval, bool $canWriteDirectly): string
+    protected function logAction(?int $aiLogId, string $actionType, array $actionData, string $result): void
     {
-        $modeText = $antiMode
-            ? 'ANTI AI MODE AKTIF. CRUD diblok total. Kamu hanya boleh membaca dan menganalisis data.'
-            : ($needsApproval
-                ? 'AI ADMIN PERMISSION AKTIF. CRUD boleh disiapkan, tetapi hasil write memerlukan izin/approval sebelum diproses.'
-                : 'AI ADMIN PERMISSION NONAKTIF. CRUD boleh dijalankan langsung tanpa izin tambahan.');
-
-        return <<<PROMPT
-Kamu adalah AI Admin TechNoteApp 2.0 untuk STMIK Triguna Dharma.
-
-Aturan:
-- Fokus pada data internal sistem.
-- Jika pertanyaan menyebut STMIK, SMKN 1 Karang Baru, atau Karang Baru, gunakan trusted_websites sebagai sumber utama.
-- Jangan mengarang data dari luar trusted website untuk topik kampus.
-- Jangan tampilkan password, security answer, API key, atau data rahasia.
-- Jika data kurang, katakan bagian mana yang kurang.
-- Jawab harus singkat, jelas, dan langsung ke inti.
-- Output HARUS JSON valid bila diminta oleh sistem.
-- Untuk aksi tulis, ikuti status mode sistem.
-
-Status mode:
-{$modeText}
-PROMPT;
+        $this->traceService->recordAction($aiLogId, $actionType, $actionData, $result);
     }
 
-    protected function buildUserPrompt(string $question, array $snapshot, array $contextDetect): string
-    {
-        return json_encode([
-            'question' => $question,
-            'detected_context' => $contextDetect,
-            'system_snapshot' => $snapshot,
-            'entity_catalog' => $this->actionService->availableEntities(),
-        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    }
-
-    protected function formatEntitySnapshotFallback(string $entity, array $snapshot): string
-    {
-        $items = $snapshot['items'] ?? [];
-
-        if (empty($items)) {
-            return 'Data tidak ditemukan.';
-        }
-
-        $label = $this->actionService->label($entity);
-        $lines = ["Data {$label}:"];
-
-        foreach ($items as $item) {
-            $arr = (array) $item;
-
-            if ($entity === 'tickets') {
-                $lines[] = "- {$arr['ticket_number']} | {$arr['type']} | {$arr['status']} | {$arr['priority']}";
-                continue;
-            }
-
-            if ($entity === 'users') {
-                $lines[] = "- {$arr['name']} | {$arr['username']} | " . ($arr['role_name'] ?? 'tanpa role');
-                continue;
-            }
-
-            if ($entity === 'software') {
-                $lines[] = "- {$arr['name']} | " . ($arr['developer'] ?? '-') . ' | ' . ($arr['version'] ?? '-');
-                continue;
-            }
-
-            $lines[] = '- ' . implode(' | ', array_filter([
-                $arr['name'] ?? $arr['title'] ?? $arr['ticket_number'] ?? $arr['task_name'] ?? $arr['id'] ?? null,
-                $arr['status'] ?? $arr['type'] ?? null,
-            ]));
-        }
-
-        return implode("\n", $lines);
-    }
-
-    protected function parseJsonSafe(string $content): array
-    {
-        $content = trim($content);
-
-        if (str_starts_with($content, '```')) {
-            $content = preg_replace('/^```(?:json)?\s*/i', '', $content);
-            $content = preg_replace('/\s*```$/', '', $content);
-            $content = trim($content);
-        }
-
-        $decoded = json_decode($content, true);
-
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            return $decoded;
-        }
-
-        $start = strpos($content, '{');
-        $end = strrpos($content, '}');
-
-        if ($start !== false && $end !== false && $end > $start) {
-            $maybeJson = substr($content, $start, $end - $start + 1);
-            $decoded = json_decode($maybeJson, true);
-
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                return $decoded;
-            }
-        }
-
-        return [
-            'reply' => trim($content),
-            'action' => 'analyze',
-            'recommendation' => null,
-            'reason' => null,
-            'source' => 'openrouter_raw',
-            'confidence' => 0.5,
-            'needs_confirmation' => false,
-        ];
-    }
-
-    protected function safeJson(mixed $value): string
-    {
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '[]';
-    }
-
-    protected function getCache(string $cacheKey): ?array
-    {
-        $row = DB::table('ai_cache')->where('cache_key', $cacheKey)->first();
-
-        if (! $row) {
-            return null;
-        }
-
-        if ($row->expired_at && now()->greaterThan($row->expired_at)) {
-            DB::table('ai_cache')->where('cache_key', $cacheKey)->delete();
-            return null;
-        }
-
-        return [
-            'question' => $row->question,
-            'answer' => $row->answer,
-            'source' => $row->source,
-            'action' => $row->action ?? null,
-        ];
-    }
-
-    protected function putCache(string $cacheKey, string $question, string $answer, string $source): void
-    {
-        DB::table('ai_cache')->updateOrInsert(
-            ['cache_key' => $cacheKey],
-            [
-                'question' => $question,
-                'answer' => $answer,
-                'source' => $source,
-                'expired_at' => now()->addMinutes($this->cacheTtlMinutes),
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-    }
-
-    protected function logAi($user, string $question, string $answer, ?string $action, string $source): int
-    {
-        return DB::table('ai_logs')->insertGetId([
-            'user_id' => data_get($user, 'id'),
-            'role' => data_get($user, 'role.name') ?? data_get($user, 'role.status') ?? 'Admin',
-            'question' => $question,
-            'answer' => $answer,
-            'action' => $action,
-            'source' => $source,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
-
-    protected function logAction(int $aiLogId, string $actionType, string $actionData, string $result): void
-    {
-        DB::table('ai_action_logs')->insert([
-            'ai_log_id' => $aiLogId,
-            'action_type' => $actionType,
-            'action_data' => $actionData,
-            'result' => $result,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
-
-    protected function storeRecommendation($ticketId, string $recommendation, string $reason): void
-    {
-        if (! $ticketId) {
-            return;
-        }
-
-        DB::table('ai_recommendations')->insert([
-            'ticket_id' => $ticketId,
-            'recommendation' => $recommendation,
-            'reason' => $reason ?: 'AI suggested recommendation',
-            'status' => 'pending',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
-
-    protected function pushHistory($user, string $in, string $out): void
+    protected function pushHistory($user, string $question, string $answer): void
     {
         $key = 'chat_history_' . data_get($user, 'id');
         $history = Session::get($key, []);
-        $history[] = ['in' => $in, 'out' => $out, 'time' => now()->toDateTimeString()];
+        $history[] = ['in' => $question, 'out' => $answer, 'at' => now()->toDateTimeString()];
+        $history = array_slice($history, -20);
+        Session::put($key, $history);
+    }
 
-        if (count($history) > 20) {
-            $history = array_slice($history, -20);
+    protected function summarizeConversation($user, string $promptSuffix): string
+    {
+        $key = 'chat_history_' . data_get($user, 'id');
+        $history = Session::get($key, []);
+
+        if (empty($history)) {
+            return 'Belum ada percakapan sebelumnya untuk disimpulkan.';
         }
 
-        Session::put($key, $history);
+        $text = '';
+        foreach ($history as $h) {
+            $text .= 'User: ' . ($h['in'] ?? '') . "\n";
+            $text .= 'Bot: ' . ($h['out'] ?? '') . "\n";
+        }
+
+        $system = 'Anda adalah asisten ringkas untuk sistem helpdesk STMIK. Buatkan ringkasan singkat (3-4 kalimat) dari percakapan berikut dan berikan rekomendasi tindakan jika perlu.';
+        $userPrompt = "Percakapan:\n{$text}\nInstruksi: Buat ringkasan singkat dan poin tindakan.";
+
+        $aiResp = $this->openRouterService->chat([
+            ['role' => 'system', 'content' => $system],
+            ['role' => 'user', 'content' => $userPrompt],
+        ], 'deepseek/deepseek-chat', 25, 500, 0.2);
+
+        return $aiResp ?: 'Maaf, gagal membuat ringkasan saat ini.';
+    }
+
+    protected function normalizeResult(array $result): array
+    {
+        return array_merge([
+            'ok' => false,
+            'reply' => '',
+            'action' => 'analyze',
+            'blocked' => false,
+            'source' => 'system',
+            'confidence' => 0.5,
+            'needs_confirmation' => false,
+        ], $result);
     }
 
     protected function resolveRoleName($user): string
@@ -1208,50 +815,5 @@ PROMPT;
             ?? 'admin';
 
         return mb_strtolower(trim((string) $role));
-    }
-
-    protected function makeCacheKey(string $question, bool $antiMode, bool $canWrite, array $context = []): string
-    {
-        return 'ai_admin:' . hash('sha256', json_encode([
-            'q'    => mb_strtolower(trim($question)),
-            'anti' => $antiMode,
-            'w'    => $canWrite,
-            'ctx'  => $context,
-        ], JSON_UNESCAPED_UNICODE));
-    }
-
-    protected function normalizeResult(array $result): array
-    {
-        $action = isset($result['action']) ? trim((string) $result['action']) : 'analyze';
-
-        $result['ok'] = (bool) ($result['ok'] ?? false);
-        $result['reply'] = trim((string) ($result['reply'] ?? ''));
-        $result['action'] = $action !== '' ? $action : 'analyze';
-        $result['blocked'] = (bool) ($result['blocked'] ?? false);
-        $result['source'] = trim((string) ($result['source'] ?? 'unknown'));
-        $result['recommendation'] = trim((string) ($result['recommendation'] ?? ''));
-        $result['reason'] = trim((string) ($result['reason'] ?? ''));
-        $result['confidence'] = $this->normalizeConfidence($result['confidence'] ?? 0);
-        $result['needs_confirmation'] = (bool) ($result['needs_confirmation'] ?? false);
-
-        return $result;
-    }
-
-    protected function normalizeConfidence(mixed $confidence): float
-    {
-        if (is_numeric($confidence)) {
-            $value = (float) $confidence;
-            return max(0, min(1, $value));
-        }
-
-        $value = mb_strtolower(trim((string) $confidence));
-
-        return match ($value) {
-            'low' => 0.25,
-            'medium' => 0.5,
-            'high' => 0.85,
-            'very_high', 'very-high', 'very high' => 0.95,
-            default => 0.0,
-        };
     }
 }

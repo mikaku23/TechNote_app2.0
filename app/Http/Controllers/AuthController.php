@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\login_log;
 use App\Models\user_activitie;
+use App\Services\SystemControlService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,9 +17,12 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
 use App\Models\role;
 
-
 class AuthController extends Controller
 {
+    public function __construct(
+        protected SystemControlService $systemControlService
+    ) {}
+
     public function login(Request $request)
     {
         $request->validate([
@@ -54,10 +58,7 @@ class AuthController extends Controller
             ]);
         }
 
-        if (
-            in_array($user->role?->name, ['Mahasiswa', 'Dosen'], true) &&
-            ! $user->role?->is_active
-        ) {
+        if ($this->systemControlService->isUserBlockedByMaintenance($user)) {
             throw ValidationException::withMessages([
                 'identity' => 'Maaf sistem dalam maintenance, silahkan coba lagi nanti.',
             ]);
@@ -81,26 +82,10 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->systemControlService->syncMaintenanceState();
 
-        $maintenanceActive = (bool) Cache::get('technote:maintenance:active', false);
-        $maintenanceEndsAt = (int) Cache::get('technote:maintenance:until', 0);
-
-        if ($maintenanceActive && $maintenanceEndsAt > 0 && now()->timestamp >= $maintenanceEndsAt) {
-            Cache::forget('technote:maintenance:active');
-            Cache::forget('technote:maintenance:started');
-            Cache::forget('technote:maintenance:until');
-
-            role::whereIn('name', ['Mahasiswa', 'Dosen'])->update([
-                'is_active' => true,
-            ]);
-
-            $maintenanceActive = false;
-        }
-
-        if (
-            $maintenanceActive &&
-            in_array($user->role?->name, ['Mahasiswa', 'Dosen'], true)
-        ) {
+        $maintenanceActive = $this->systemControlService->isMaintenanceActive();
+        if ($maintenanceActive && $this->systemControlService->isUserBlockedByMaintenance($user)) {
             throw ValidationException::withMessages([
                 'identity' => 'Maaf sistem sedang maintenance, silakan coba lagi nanti.',
             ]);
@@ -190,14 +175,7 @@ class AuthController extends Controller
 
     public function forgotPassword(Request $request)
     {
-        $modes = array_merge([
-            'forgot_password'   => true,
-            'student_booking'   => true,
-            'anti_ai_mode'      => false,
-            'otp_whatsapp'      => true,
-            'otp_email'         => true,
-            'security_question' => true,
-        ], Cache::get('technote:system:modes', []));
+        $modes = array_merge($this->systemControlService->defaultModes(), $this->systemControlService->loadModes());
 
         if (!($modes['forgot_password'] ?? true)) {
             return redirect()
@@ -901,8 +879,6 @@ class AuthController extends Controller
 
         $resendCount = (int) ($state['resend_count'] ?? 0) + 1;
 
-        // resend pertama = gratis, setelah itu cooldown 2 menit
-        // resend kedua = cooldown 3 menit, dst.
         $cooldownMinutes = $resendCount + 1;
 
         $state['resend_count'] = $resendCount;

@@ -1,6 +1,2 @@
 <?php
-return [
-    'hari ini',
-
-    'sekarang'
-];
+return ['hari ini','sekarang','kemarin','besok'];

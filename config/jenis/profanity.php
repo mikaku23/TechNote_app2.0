@@ -1,4 +1,2 @@
 <?php
-return [
-    'anjing','bangsat','kontol','memek','tolol'
-];
+return ['anjing','bangsat','kontol','memek','tolol'];

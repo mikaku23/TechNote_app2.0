@@ -1,7 +1,2 @@
 <?php
-return [
-    'menurut',
-    'menurutmu',
-    'secara',
-    'langsung'
-];
+return ['menurut','menurutmu','secara','langsung','detail','spesifik'];

@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use Throwable;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 class OpenRouterService
 {
@@ -53,33 +53,85 @@ class OpenRouterService
 
             return $content ? trim((string) $content) : null;
         } catch (Throwable $e) {
-            logger()->warning('OpenRouter call failed', [
-                'message' => $e->getMessage(),
-            ]);
-
+            logger()->warning('OpenRouter call failed', ['message' => $e->getMessage()]);
             return null;
         }
     }
 
-    public function classifyIntent(string $message, array $availableIntents): ?string
+    public function classifyPlan(string $message, array $options = []): ?array
     {
-        $system = 'Anda adalah classifier. Klasifikasikan message menjadi salah satu intent berikut. Jawab hanya dengan nama intent atau none. Intent: ' . implode(', ', $availableIntents);
-        $user   = 'Message: "' . $message . '"';
+        $system = <<<PROMPT
+Anda adalah classifier intent untuk sistem admin.
+Pahami maksud pengguna, bukan hanya kata kunci.
+Kembalikan JSON valid saja, tanpa markdown, tanpa penjelasan.
 
-        $resp = $this->chat([
+Skema JSON:
+{
+  "intent": "crud.create|crud.read|crud.update|crud.delete|crud.restore|lookup|summary|time|self|bot|campus|contact|analyze",
+  "operation": "create|read|update|delete|restore|search|list|summary|time|self|bot|campus|contact|analyze",
+  "entity": "users|roles|software|tickets|penginstalans|perbaikans|trusted_websites|login_logs|user_activities|ai_logs|ai_tasks|ai_recommendations|notifications|maintenances|system_settings|rekaps|vercel_sync_logs|ticket_status_logs|ticket_comments|contacts|null",
+  "target_field": "id|name|username|email|nim|nip|ticket_number|url|key|null",
+  "target_value": "string|null",
+  "field": "string|null",
+  "value": "string|null",
+  "confidence": 0.0,
+  "needs_clarification": false,
+  "reason": "singkat"
+}
+
+Aturan:
+- Jika pertanyaan meminta data, pilih read/search/list, bukan self.
+- Jika pertanyaan punya kata "hari ini" dan membahas data, itu modifier tanggal, bukan time.
+- Jika pertanyaan jelas meminta waktu sekarang, barulah intent=time.
+- Jika kalimat mengandung "ubah status ... nonactive", petakan ke update dan is_active bila relevan.
+- Jika data target lebih dari satu, set needs_clarification=true.
+PROMPT;
+
+        if (! empty($options)) {
+            $system .= "\n\nOpsi tambahan:\n" . json_encode($options, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        }
+
+        $reply = $this->chat([
             ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $user],
-        ], $this->defaultModel, 20, 120, 0.0);
+            ['role' => 'user', 'content' => $message],
+        ], $this->defaultModel, 20, 220, 0.0);
 
-        if (! $resp) {
+        if (! $reply) {
             return null;
         }
 
-        $respLower = mb_strtolower($resp);
+        $decoded = $this->safeDecodeJson($reply);
 
-        foreach ($availableIntents as $intent) {
-            if (str_contains($respLower, mb_strtolower($intent))) {
-                return $intent;
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    public function safeDecodeJson(string $content): array|string|null
+    {
+        $content = trim($content);
+
+        if ($content === '') {
+            return null;
+        }
+
+        if (str_starts_with($content, '```')) {
+            $content = preg_replace('/^```(?:json)?\s*/i', '', $content);
+            $content = preg_replace('/\s*```$/', '', $content);
+            $content = trim($content);
+        }
+
+        $decoded = json_decode($content, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $decoded;
+        }
+
+        $start = strpos($content, '{');
+        $end = strrpos($content, '}');
+
+        if ($start !== false && $end !== false && $end > $start) {
+            $maybe = substr($content, $start, $end - $start + 1);
+            $decoded = json_decode($maybe, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
             }
         }
 

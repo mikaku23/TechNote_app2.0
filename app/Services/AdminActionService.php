@@ -5,19 +5,20 @@ namespace App\Services;
 class AdminActionService
 {
     protected array $operations = [
-        'create' => ['buat', 'tambah', 'tambahkan', 'insert', 'create', 'add'],
-        'update' => ['ubah', 'edit', 'perbarui', 'update', 'ganti', 'sesuaikan'],
-        'delete' => ['hapus', 'delete', 'remove', 'destroy'],
-        'read' => ['lihat', 'tampilkan', 'detail', 'cek', 'cari', 'show', 'baca', 'daftar'],
+        'create' => ['buat', 'tambah', 'tambahkan', 'insert', 'create', 'add', 'simpan', 'catat'],
+        'read'   => ['lihat', 'tampilkan', 'detail', 'cek', 'cari', 'show', 'baca', 'daftar', 'data', 'list', 'semua'],
+        'update' => ['ubah', 'edit', 'perbarui', 'update', 'ganti', 'sesuaikan', 'set', 'jadikan', 'menjadi'],
+        'delete' => ['hapus', 'delete', 'remove', 'destroy', 'buang'],
+        'restore' => ['restore', 'kembalikan', 'pulihkan', 'aktifkan kembali'],
         'analyze' => ['analisis', 'analisa', 'ringkas', 'rekomendasi', 'insight', 'evaluasi', 'statistik', 'masalah', 'bottleneck'],
     ];
 
     protected array $entities = [
-        'users' => ['user', 'pengguna', 'mahasiswa', 'dosen', 'akun'],
+        'users' => ['user', 'pengguna', 'mahasiswa', 'dosen', 'akun', 'username'],
         'roles' => ['role', 'peran', 'jabatan'],
         'software' => ['software', 'aplikasi', 'program'],
         'tickets' => ['ticket', 'tiket', 'antrian'],
-        'penginstalans' => ['penginstalan', 'instalasi', 'install', 'instal'],
+        'penginstalans' => ['penginstalan', 'instalasi', 'install', 'instal', 'pemasangan'],
         'perbaikans' => ['perbaikan', 'repair', 'service', 'servis'],
         'trusted_websites' => ['trusted website', 'website terpercaya', 'situs resmi', 'website resmi', 'sumber resmi'],
         'login_logs' => ['login log', 'log login', 'online offline', 'log masuk'],
@@ -28,8 +29,13 @@ class AdminActionService
         'notifications' => ['notifikasi', 'notification'],
         'maintenances' => ['maintenance', 'pemeliharaan'],
         'system_settings' => ['setting', 'pengaturan', 'system setting'],
-        'rekaps' => ['rekap', 'rekapan', 'summary'],
+        'rekaps' => ['rekap', 'rekapan', 'summary', 'ringkasan data'],
         'vercel_sync_logs' => ['vercel sync', 'sync vercel', 'log vercel'],
+        'ticket_status_logs' => ['ticket status log', 'status log', 'log status tiket'],
+        'ticket_comments' => ['ticket comment', 'komentar tiket', 'catatan tiket'],
+        'contacts' => ['contact', 'kontak', 'kritik', 'saran', 'pesan'],
+        'password_reset_otps' => ['otp', 'password reset otp', 'reset otp'],
+        'sessions' => ['session', 'sesi'],
     ];
 
     public function detectContext(string $message): array
@@ -39,12 +45,17 @@ class AdminActionService
         $operation = $this->detectOperation($m);
         $entity = $this->detectEntity($m);
         $keyword = $this->detectKeyword($m);
+        $hasId = (bool) preg_match('/\b(?:id|data\s+ke|record\s+ke)\s*[:=]?\s*\d+\b/u', $m);
+        $hasName = (bool) preg_match('/\b(?:nama|name|username|ticket\s*number|ticket_number|url|email|key)\b/u', $m);
 
         return [
             'operation' => $operation,
             'entity' => $entity,
             'keyword' => $keyword,
             'is_write' => $this->isWriteOperation($operation),
+            'is_read' => $this->isReadOperation($operation),
+            'has_id_hint' => $hasId,
+            'has_name_hint' => $hasName,
             'target_label' => $entity ? $this->label($entity) : null,
         ];
     }
@@ -53,12 +64,30 @@ class AdminActionService
     {
         $m = mb_strtolower(trim($message));
 
-        foreach (['create', 'update', 'delete', 'read', 'analyze'] as $operation) {
+        foreach (['create', 'update', 'delete', 'restore', 'read', 'analyze'] as $operation) {
             foreach ($this->operations[$operation] ?? [] as $word) {
-                if ($word !== '' && str_contains($m, mb_strtolower($word))) {
+                $pattern = '/\b' . preg_quote(mb_strtolower($word), '/') . '\b/u';
+
+                if (preg_match($pattern, $m)) {
+                    if ($operation === 'read' && $this->looksLikeModifierOnly($m, $word)) {
+                        continue;
+                    }
+
                     return $operation;
                 }
             }
+        }
+
+        if (preg_match('/\b(apakah\s+ada|ada\s+data|cari\s+data|temukan|lihat\s+data|tampilkan\s+data|data\s+itu|data\s+tersebut)\b/u', $m)) {
+            return 'read';
+        }
+
+        if (preg_match('/\b(ubah|update|edit|ganti|perbarui|set|jadikan|menjadi)\b/u', $m)) {
+            return 'update';
+        }
+
+        if (preg_match('/\b(hapus|delete|remove|destroy|buang)\b/u', $m)) {
+            return 'delete';
         }
 
         return 'analyze';
@@ -70,7 +99,9 @@ class AdminActionService
 
         foreach ($this->entities as $entity => $keywords) {
             foreach ($keywords as $word) {
-                if ($word !== '' && str_contains($m, mb_strtolower($word))) {
+                $pattern = '/\b' . preg_quote(mb_strtolower($word), '/') . '\b/u';
+
+                if (preg_match($pattern, $m)) {
                     return $entity;
                 }
             }
@@ -85,7 +116,9 @@ class AdminActionService
 
         foreach ($this->operations as $operation => $keywords) {
             foreach ($keywords as $word) {
-                if ($word !== '' && str_contains($m, mb_strtolower($word))) {
+                $pattern = '/\b' . preg_quote(mb_strtolower($word), '/') . '\b/u';
+
+                if (preg_match($pattern, $m)) {
                     return $word;
                 }
             }
@@ -96,7 +129,12 @@ class AdminActionService
 
     public function isWriteOperation(?string $operation): bool
     {
-        return in_array($operation, ['create', 'update', 'delete'], true);
+        return in_array($operation, ['create', 'update', 'delete', 'restore'], true);
+    }
+
+    public function isReadOperation(?string $operation): bool
+    {
+        return in_array($operation, ['read', 'analyze'], true);
     }
 
     public function label(?string $entity): string
@@ -119,7 +157,12 @@ class AdminActionService
             'system_settings' => 'System Setting',
             'rekaps' => 'Rekap',
             'vercel_sync_logs' => 'Vercel Sync Log',
-            default => $entity ? ucfirst($entity) : 'Unknown',
+            'ticket_status_logs' => 'Ticket Status Log',
+            'ticket_comments' => 'Ticket Comment',
+            'contacts' => 'Contact',
+            'password_reset_otps' => 'Password Reset OTP',
+            'sessions' => 'Session',
+            default => $entity ? ucfirst(str_replace('_', ' ', $entity)) : 'Unknown',
         };
     }
 
@@ -130,6 +173,25 @@ class AdminActionService
 
     public function availableOperations(): array
     {
-        return ['create', 'update', 'delete', 'read', 'analyze'];
+        return array_keys($this->operations);
+    }
+
+    public function entityKeywords(string $entity): array
+    {
+        return $this->entities[$entity] ?? [];
+    }
+
+    public function entityAliases(): array
+    {
+        return $this->entities;
+    }
+
+    protected function looksLikeModifierOnly(string $message, string $word): bool
+    {
+        if ($word !== 'data') {
+            return false;
+        }
+
+        return (bool) preg_match('/\b(data\s+hari\s+ini|hari\s+ini|sekarang|tanggal|bulan\s+ini|tahun\s+ini)\b/u', $message);
     }
 }

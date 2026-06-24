@@ -2,13 +2,6 @@
 
 return [
     'type' => 'modifier',
-    'trigger' => [
-        'hari ini',
-        'sekarang',
-        'tanggal',
-        'bulan ini',
-        'tahun ini'
-    ],
-
+    'trigger' => ['hari ini','sekarang','bulan ini','tahun ini'],
     'response' => ' ',
 ];
