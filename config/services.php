@@ -35,6 +35,7 @@ return [
         ],
     ],
 
+
     'login_anchor' => [
         'latitude' => env('LOGIN_ANCHOR_LAT'),
         'longitude' => env('LOGIN_ANCHOR_LNG'),
@@ -44,4 +45,5 @@ return [
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
     ],
+
 ];

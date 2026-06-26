@@ -1,191 +1,59 @@
-# TechNoteApp 2.0
+<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
-> Next Generation of TechNoteApp 1.0
+<p align="center">
+<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+</p>
 
-TechNoteApp 2.0 is a unified smart technician service ecosystem designed to manage software installation services, device repairs, ticketing workflows, AI-powered assistance, real-time monitoring, and service tracking within a single integrated platform.
+## About Laravel
 
-The system connects students, lecturers, administrators, and technicians through a centralized ticketing architecture, providing a more efficient, transparent, and intelligent service experience.
+Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-## 🚀 Vision
+- [Simple, fast routing engine](https://laravel.com/docs/routing).
+- [Powerful dependency injection container](https://laravel.com/docs/container).
+- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
+- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
+- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
+- [Robust background job processing](https://laravel.com/docs/queues).
+- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
 
-To build a modern and intelligent technician service ecosystem that simplifies service management, enhances user experience, and supports data-driven decision making.
+Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
-## ✨ Key Features
+## Learning Laravel
 
-### 🎫 Integrated Ticketing System
-- Centralized service tickets
-- Software installation requests
-- Device repair requests
-- Ticket status tracking
-- Ticket history and logs
-- Internal comments and notes
+Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
 
-### 🤖 AI Assistant
-- AI chatbot for students
-- AI chatbot for lecturers
-- Internal knowledge-based responses
-- Trusted source integration
-- Service information assistant
+If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
 
-### 🧠 AI Agent for Administrators
-- Data analysis
-- Smart recommendations
-- Automated workflows
-- Controlled CRUD operations
-- Anti-AI Mode support
+## Laravel Sponsors
 
-### 📊 Real-Time Monitoring
-- Live service status
-- User activity tracking
-- Login monitoring
-- Dashboard analytics
-- Service statistics
+We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
 
-### 🔔 Notification System
-- WhatsApp notifications
-- Status updates
-- OTP verification
-- Password recovery support
+### Premium Partners
 
-### 📑 Reporting & Analytics
-- Daily reports
-- Monthly reports
-- Annual reports
-- Export PDF
-- Export Excel
-- Print support
+- **[Vehikl](https://vehikl.com)**
+- **[Tighten Co.](https://tighten.co)**
+- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
+- **[64 Robots](https://64robots.com)**
+- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
+- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
+- **[Redberry](https://redberry.international/laravel-development)**
+- **[Active Logic](https://activelogic.com)**
 
-### 🔐 Security & System Control
-- Role-based access control
-- Maintenance mode
-- Activity logs
-- Authentication middleware
-- System settings management
+## Contributing
 
-## 👥 User Roles
+Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
 
-### Administrator
-- Manage users
-- Manage software
-- Manage tickets
-- Manage installations
-- Manage repairs
-- Access AI Agent
-- Generate reports
+## Code of Conduct
 
-### Student
-- Submit installation requests
-- Track ticket status
-- Receive notifications
-- Access AI Assistant
+In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
 
-### Lecturer
-- Submit repair requests
-- Track service status
-- Receive notifications
-- Access AI Assistant
+## Security Vulnerabilities
 
-## 🏗️ Ecosystem Architecture
+If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
-```text
-Students
-    │
-Lecturers
-    │
-    ▼
- ┌─────────┐
- │ Tickets │
- └─────────┘
-    │
- ┌──┴──┐
- ▼     ▼
-Installation
-Repair
-    │
-    ▼
-Monitoring
-    │
-    ▼
-Notifications
-    │
-    ▼
-Reports & Analytics
-```
+## License
 
-## 🛠️ Technology Stack
-
-### Backend
-- Laravel
-- PHP
-- MySQL
-
-### Frontend
-- HTML
-- CSS
-- JavaScript
-
-### Integrations
-- WhatsApp API
-- QR Code System
-- AI Services
-
-## 🎨 Design Philosophy
-
-TechNoteApp 2.0 introduces a futuristic user experience inspired by modern Liquid Glass design principles.
-
-Core principles:
-
-- Simplicity
-- Transparency
-- Accessibility
-- Consistency
-- Real-Time Interaction
-- Unified Ecosystem
-
-## 🗄️ Database Modules
-
-- Roles
-- Users
-- Software
-- Tickets
-- Penginstalans
-- Perbaikans
-- Ticket Status Logs
-- Ticket Comments
-- Notifications
-- AI Logs
-- AI Recommendations
-- AI Cache
-- AI Tasks
-- AI Action Logs
-- Trusted Websites
-- Login Logs
-- User Activities
-- Contacts
-- Password Reset OTPs
-- Maintenances
-- System Settings
-- Rekaps
-- Vercel Sync Logs
-
-## 🗺️ Roadmap
-
-### Version 2.0
-- Unified Smart Ecosystem
-- Integrated Ticketing System
-- AI Assistant
-- AI Agent
-- Real-Time Monitoring
-- WhatsApp Notifications
-- Public Service Tracking
-
-### Future Releases
-- Mobile Application
-- Advanced Analytics
-- Predictive Maintenance
-- Smart Recommendations
-- Multi-Campus Support
-
-## 📄 License
-
-Developed as part of the evolution of TechNoteApp 1.0 into a modern smart technician service ecosystem for educational institutions.
+The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
