@@ -242,7 +242,10 @@ class LogicAIforAdmin
 
         $payload = [
             'target' => $plan['target'] ?? [],
+            'targets' => $plan['targets'] ?? ($plan['raw']['targets'] ?? []),
+            'items' => $plan['items'] ?? ($plan['raw']['items'] ?? []),
             'filters' => $plan['filters'] ?? [],
+            'mode' => $plan['mode'] ?? ($plan['raw']['mode'] ?? 'single'),
         ];
 
         if (! empty($payload['filters']['today']) && $entity === 'tickets') {
@@ -293,7 +296,24 @@ class LogicAIforAdmin
         }
 
         $rows = $execution['rows'] ?? [];
-        $reply = $warning . $this->formatRows($entity, $rows, $plan['filters'] ?? []);
+
+        if (($plan['filters']['only_deleted'] ?? false) === true && ! empty($rows)) {
+            $this->storeSoftDeleteContext($entity, $rows);
+        }
+
+        $replyBody = $this->formatRows($entity, $rows, $plan['filters'] ?? []);
+        if (($plan['filters']['only_deleted'] ?? false) === true) {
+            $replyBody = 'Berikut data ' . $this->actionService->label($entity) . ' yang di-soft delete:
+' . $replyBody;
+        } else {
+            $softDeletedCount = (int) ($execution['soft_deleted_count'] ?? 0);
+            if ($softDeletedCount > 0) {
+                $replyBody .= "
+
+Lanjutkan untuk melihat {$softDeletedCount} data yang di soft delete.";
+            }
+        }
+        $reply = $warning . $replyBody;
         $this->pushHistory($user, $question, $reply);
         $aiLogId = $this->logAi($user, $question, $reply, 'read_' . $entity, 'database');
         $this->logAction($aiLogId, 'read_' . $entity, [
@@ -350,8 +370,11 @@ class LogicAIforAdmin
 
         $crud = [
             'data' => $plan['data'] ?? [],
+            'items' => $plan['items'] ?? ($plan['raw']['items'] ?? []),
             'target' => $plan['target'] ?? [],
+            'targets' => $plan['targets'] ?? ($plan['raw']['targets'] ?? []),
             'filters' => $plan['filters'] ?? [],
+            'mode' => $plan['mode'] ?? ($plan['raw']['mode'] ?? 'single'),
         ];
 
         $execution = $this->crudExecutorService->execute($operation, $entity, $crud);
@@ -397,7 +420,74 @@ class LogicAIforAdmin
             ]);
         }
 
+        if ($operation === 'restore' && ($execution['ok'] ?? false) === false && in_array(($execution['status'] ?? ''), ['target_missing', 'not_found', 'error'], true)) {
+            $contextRestore = $this->attemptRestoreFromSoftDeleteContext($entity, $crud, $question);
+
+            if (($contextRestore['ok'] ?? false) === true) {
+                $execution = $contextRestore;
+                $reply = $warning . ($execution['message'] ?? 'Data berhasil dipulihkan.');
+                $this->pushHistory($user, $question, $reply);
+                $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'database');
+                $this->logAction($aiLogId, $operation . '_' . $entity, [
+                    'question' => $question,
+                    'crud' => $crud,
+                    'result' => $execution,
+                    'restored_from_context' => true,
+                ], 'success');
+
+                return $this->normalizeResult([
+                    'ok' => true,
+                    'reply' => $reply,
+                    'action' => $operation . '_' . $entity,
+                    'blocked' => false,
+                    'source' => 'database',
+                    'confidence' => 0.9,
+                    'needs_confirmation' => false,
+                ]);
+            }
+
+            $trashed = $this->crudExecutorService->execute('read', $entity, [
+                'filters' => [
+                    'only_deleted' => true,
+                    'include_deleted' => true,
+                    'list_all' => true,
+                    'limit' => 10,
+                ],
+            ]);
+
+            if (($trashed['ok'] ?? false) === true && ! empty($trashed['rows'])) {
+                $this->storeSoftDeleteContext($entity, $trashed['rows']);
+                $reply = $warning . 'Data dengan ID tersebut tidak ditemukan. Berikut data ' . $this->actionService->label($entity) . ' yang di-soft delete:
+' . $this->formatRows($entity, $trashed['rows'], ['only_deleted' => true]);
+            } else {
+                $reply = $warning . 'Data dengan ID tersebut tidak ditemukan dan belum ada data soft delete yang tersedia.';
+            }
+
+            $this->pushHistory($user, $question, $reply);
+            $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'not_found');
+            $this->logAction($aiLogId, $operation . '_' . $entity, [
+                'question' => $question,
+                'crud' => $crud,
+                'result' => $execution,
+            ], 'failed');
+
+            return $this->normalizeResult([
+                'ok' => false,
+                'reply' => $reply,
+                'action' => $operation . '_' . $entity,
+                'blocked' => false,
+                'source' => 'not_found',
+                'confidence' => 0.45,
+                'needs_confirmation' => false,
+            ]);
+        }
+
         $reply = $warning . ($execution['message'] ?? 'Selesai.');
+
+        if (($crud['mode'] ?? 'single') === 'bulk' && ($execution['ok'] ?? false) === true) {
+            $reply = $warning . ($execution['message'] ?? 'Bulk operation berhasil.');
+        }
+
         $this->pushHistory($user, $question, $reply);
         $aiLogId = $this->logAi($user, $question, $reply, $operation . '_' . $entity, 'direct');
         $this->logAction($aiLogId, $operation . '_' . $entity, [
@@ -704,13 +794,17 @@ Aturan:
                 break;
         }
 
+        if (! empty($row['deleted_at'] ?? null) || ! empty($row['delete_at'] ?? null)) {
+            $parts[] = 'deleted_at=' . ($row['deleted_at'] ?? $row['delete_at']);
+        }
+
         return $label . ': ' . implode(', ', $parts);
     }
 
     protected function summarizeRow(string $entity, array $row): string
     {
-        return match ($entity) {
-            'users' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['username'] ?? '-') . ' | ' . ($row['email'] ?? '-'),
+        $summary = match ($entity) {
+            'users' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['username'] ?? '-') . ' | ' . ($row['email'] ?? '-') . ' | role=' . ($row['role_name'] ?? $row['role'] ?? $row['role_id'] ?? '-'),
             'roles' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['description'] ?? '-'),
             'software' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? '-') . ' | ' . ($row['developer'] ?? '-') . ' | ' . ($row['version'] ?? '-'),
             'tickets' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['ticket_number'] ?? '-') . ' | ' . ($row['type'] ?? '-') . ' | ' . ($row['status'] ?? '-'),
@@ -718,6 +812,12 @@ Aturan:
             'rekaps' => '#' . ($row['id'] ?? '-') . ' | ' . ($row['rekap_date'] ?? '-') . ' | inst=' . ($row['total_installations'] ?? '-') . ' rep=' . ($row['total_repairs'] ?? '-'),
             default => '#' . ($row['id'] ?? '-') . ' | ' . ($row['name'] ?? $row['title'] ?? $row['ticket_number'] ?? $row['task_name'] ?? '-'),
         };
+
+        if (! empty($row['deleted_at'] ?? null) || ! empty($row['delete_at'] ?? null)) {
+            $summary .= ' | deleted_at=' . ($row['deleted_at'] ?? $row['delete_at']);
+        }
+
+        return $summary;
     }
 
     protected function formatAmbiguousMatches(string $entity, array $matches): string
@@ -747,6 +847,128 @@ Aturan:
         }
 
         return (bool) $value ? 'active' : 'inactive';
+    }
+
+    protected function storeSoftDeleteContext(string $entity, array $rows): void
+    {
+        $key = 'soft_delete_context_' . $entity;
+        $normalized = [];
+
+        foreach ($rows as $row) {
+            $arr = (array) $row;
+            $normalized[] = array_filter([
+                'id' => $arr['id'] ?? null,
+                'name' => $arr['name'] ?? null,
+                'username' => $arr['username'] ?? null,
+                'email' => $arr['email'] ?? null,
+                'nim' => $arr['nim'] ?? null,
+                'nip' => $arr['nip'] ?? null,
+                'title' => $arr['title'] ?? null,
+                'ticket_number' => $arr['ticket_number'] ?? null,
+                'url' => $arr['url'] ?? null,
+                'key' => $arr['key'] ?? null,
+                'task_name' => $arr['task_name'] ?? null,
+                'item_name' => $arr['item_name'] ?? null,
+                'rekap_date' => $arr['rekap_date'] ?? null,
+                'deleted_at' => $arr['deleted_at'] ?? ($arr['delete_at'] ?? null),
+            ], static fn ($v) => $v !== null && $v !== '');
+        }
+
+        Session::put($key, array_values($normalized));
+    }
+
+    protected function getSoftDeleteContext(string $entity): array
+    {
+        return Session::get('soft_delete_context_' . $entity, []);
+    }
+
+    protected function attemptRestoreFromSoftDeleteContext(string $entity, array $crud, string $question): array
+    {
+        $context = $this->getSoftDeleteContext($entity);
+
+        if (empty($context)) {
+            return [
+                'ok' => false,
+                'status' => 'not_found',
+                'message' => 'Belum ada konteks soft delete yang bisa dipakai.',
+            ];
+        }
+
+        $targets = [];
+        foreach ([$crud['target'] ?? [], $crud['targets'] ?? [], $crud['items'] ?? []] as $source) {
+            if (is_array($source) && array_is_list($source)) {
+                foreach ($source as $item) {
+                    if (is_array($item) && isset($item['target']) && is_array($item['target'])) {
+                        $targets[] = $item['target'];
+                    } elseif (is_array($item)) {
+                        $targets[] = $item;
+                    } elseif (is_numeric($item)) {
+                        $targets[] = ['id' => (int) $item];
+                    }
+                }
+            } elseif (is_array($source) && ! empty($source)) {
+                $targets[] = $source;
+            }
+        }
+
+        $matchedIds = [];
+        foreach ($targets as $target) {
+            foreach ($context as $row) {
+                if ($this->softDeleteTargetMatchesRow($target, $row)) {
+                    $matchedIds[] = (int) ($row['id'] ?? 0);
+                }
+            }
+        }
+
+        $matchedIds = array_values(array_unique(array_filter($matchedIds)));
+
+        if (empty($matchedIds)) {
+            return [
+                'ok' => false,
+                'status' => 'not_found',
+                'message' => 'Data tidak cocok dengan data soft delete yang tersimpan.',
+            ];
+        }
+
+        $items = array_map(static fn (int $id) => ['target' => ['id' => $id]], $matchedIds);
+
+        return $this->crudExecutorService->execute('restore', $entity, [
+            'items' => $items,
+            'targets' => $items,
+            'mode' => 'bulk',
+        ]);
+    }
+
+    protected function softDeleteTargetMatchesRow(array $target, array $row): bool
+    {
+        foreach ($target as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $key = mb_strtolower((string) $key);
+            if (! array_key_exists($key, $row)) {
+                continue;
+            }
+
+            $rowValue = $row[$key];
+            if (is_numeric($value) && is_numeric($rowValue)) {
+                if ((int) $value === (int) $rowValue) {
+                    return true;
+                }
+                continue;
+            }
+
+            if (is_string($value) && is_string($rowValue)) {
+                $needle = mb_strtolower(trim($value));
+                $hay = mb_strtolower(trim($rowValue));
+                if ($needle !== '' && ($needle === $hay || str_contains($hay, $needle) || str_contains($needle, $hay))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     protected function logAi($user, string $question, string $answer, string $action, string $source): int

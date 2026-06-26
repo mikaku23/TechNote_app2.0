@@ -81,8 +81,20 @@ class IntentPlannerService
 
         $readHint = ($operation === 'read')
             || preg_match('/\b(ada|apakah ada|cari data|lihat data|tampilkan data|data)\b/u', $m);
+        $softDeleteScope = (bool) preg_match('/\b(soft\s*delete|soft-delete|recycle|recycle\s+bin|trash|trash\s+bin|sampah|deleted\s+data|data\s+terhapus|data\s+yang\s+dihapus)\b/u', $m);
+        $restoreHint = (bool) preg_match('/\b(restore|kembalikan|pulihkan|aktifkan kembali)\b/u', $m);
 
-        if ($operation === 'analyze') {
+        if ($softDeleteScope && $entity && empty($crudPlan['target']) && empty($crudPlan['data']) && empty($crudPlan['items'])) {
+            $operation = 'read';
+            $crudPlan['operation'] = 'read';
+            $crudPlan['route'] = 'read';
+            $crudPlan['filters']['only_deleted'] = true;
+            $crudPlan['filters']['include_deleted'] = true;
+            $crudPlan['filters']['list_all'] = true;
+            $crudPlan['notes'][] = 'soft_deleted_scope';
+        } elseif ($restoreHint) {
+            $operation = 'restore';
+        } elseif ($operation === 'analyze') {
             if ($readHint && $entity) {
                 $operation = 'read';
             } elseif (preg_match('/\b(buat|tambah|create|insert|simpan|catat)\b/u', $m)) {
@@ -91,8 +103,6 @@ class IntentPlannerService
                 $operation = 'update';
             } elseif (preg_match('/\b(hapus|delete|remove|destroy|buang)\b/u', $m)) {
                 $operation = 'delete';
-            } elseif (preg_match('/\b(restore|kembalikan|pulihkan|aktifkan kembali)\b/u', $m)) {
-                $operation = 'restore';
             }
         }
 
@@ -102,6 +112,7 @@ class IntentPlannerService
         $plan['route'] = $this->routeFromOperation($operation);
         $plan['target'] = $crudPlan['target'] ?? [];
         $plan['data'] = $crudPlan['data'] ?? [];
+        $plan['items'] = $crudPlan['items'] ?? [];
         $plan['filters'] = $crudPlan['filters'] ?? [];
         $plan['confidence'] = $crudPlan['confidence'] ?? 0.4;
         $plan['raw'] = $crudPlan;

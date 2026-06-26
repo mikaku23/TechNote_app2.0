@@ -13,6 +13,7 @@
         "chillerlan/php-qrcode": "^6.0",
         "enshrined/svg-sanitize": "^0.22.0",
         "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
         "meyfa/php-svg": "^0.16.1",
         "resend/resend-laravel": "^1.4",

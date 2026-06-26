@@ -87,9 +87,9 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::get('/chat-status/{jobId}', [AdminAiController::class, 'chatStatus'])->name('admin.ai.chat.status');
     Route::post('/admin/ai/anti-mode', [AdminAiController::class, 'toggleAntiAi'])->name('admin.ai.anti-mode');
 
-    Route::get('/admin/ai/log', [AdminAiController::class, 'logs'])->name('admin.ai.log');
-    Route::get('/admin/ai/tasks', [AdminAiController::class, 'tasks'])->name('admin.ai.tasks');
-    Route::get('/admin/ai/rekom', [AdminAiController::class, 'recommendations'])->name('admin.ai.rekom');
+    Route::get('/admin/ai/log', [AdminAiController::class, 'logs'])->name('ai.log');
+    Route::get('/admin/ai/tasks', [AdminAiController::class, 'tasks'])->name('ai.tasks');
+    Route::get('/admin/ai/rekom', [AdminAiController::class, 'recommendations'])->name('ai.rekom');
 
     Route::get('/maintenance', [SettingController::class, 'maintenanceIndex'])->name('setting.maintenance.index');
     Route::post('/maintenance/start', [SettingController::class, 'maintenanceStart'])->name('setting.maintenance.start');

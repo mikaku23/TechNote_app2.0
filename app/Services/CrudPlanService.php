@@ -19,6 +19,8 @@ class CrudPlanService
         $target = [];
         $filters = [];
         $notes = [];
+        $items = [];
+        $mode = 'single';
 
         $pairs = $this->extractKeyValuePairs($question);
         if (! empty($pairs)) {
@@ -27,6 +29,26 @@ class CrudPlanService
                     $target[$key] = $value;
                 } else {
                     $data[$key] = $value;
+                }
+            }
+        }
+
+        if (in_array($operation, ['create', 'update', 'delete', 'restore', 'read'], true)) {
+            $items = $this->extractBulkItems($question, $entity, $operation);
+
+            if (! empty($items)) {
+                $mode = 'bulk';
+                $notes[] = 'bulk_payload_detected';
+
+                $first = $items[0] ?? [];
+
+                if ($operation === 'create') {
+                    $data = array_merge($data, is_array($first) ? ($first['data'] ?? $first) : []);
+                } elseif ($operation === 'update') {
+                    $data = array_merge($data, is_array($first) ? ($first['data'] ?? $first) : []);
+                    $target = array_merge($target, is_array($first) ? ($first['target'] ?? []) : []);
+                } elseif (in_array($operation, ['delete', 'restore', 'read'], true)) {
+                    $target = array_merge($target, is_array($first) ? ($first['target'] ?? []) : []);
                 }
             }
         }
@@ -44,7 +66,24 @@ class CrudPlanService
             $filters['list_all'] = true;
         }
 
-        if (preg_match('/\b(id|nomor)\s*[:=]?\s*(\d+)\b/u', mb_strtolower($question), $m)) {
+        if ($operation === 'read' && preg_match('/\b(soft\s*delete|soft-delete|recycle|recycle\s+bin|trash|trash\s+bin|sampah|deleted\s+data|data\s+terhapus|data\s+yang\s+dihapus)\b/u', mb_strtolower($question))) {
+            $filters['only_deleted'] = true;
+            $filters['include_deleted'] = true;
+            $filters['list_all'] = true;
+            $notes[] = 'soft_deleted_scope';
+        }
+
+        $idList = $this->extractIdListTargets($question);
+        if (! empty($idList)) {
+            if (count($idList) > 1 && in_array($operation, ['delete', 'restore', 'read'], true)) {
+                $items = array_map(fn ($id) => ['target' => ['id' => $id]], $idList);
+                $mode = 'bulk';
+                $notes[] = 'id_list_detected';
+                $target = [];
+            } elseif (count($idList) === 1 && ! isset($target['id'])) {
+                $target['id'] = $idList[0];
+            }
+        } elseif (preg_match('/\b(id|nomor)\s*[:=]?\s*(\d+)\b/u', mb_strtolower($question), $m)) {
             $target['id'] = (int) $m[2];
         }
 
@@ -71,6 +110,8 @@ class CrudPlanService
         return [
             'entity' => $entity,
             'operation' => $operation,
+            'mode' => $mode,
+            'items' => $items,
             'data' => $data,
             'target' => $target,
             'filters' => $filters,
@@ -78,6 +119,7 @@ class CrudPlanService
             'confidence' => $this->confidenceScore($question, $entity, $operation, $data, $target, $filters),
         ];
     }
+
 
     public function isMassDelete(array $plan, string $question): bool
     {
@@ -118,6 +160,385 @@ class CrudPlanService
                 }
                 $value = trim((string) $match['value'], " \t\n\r\0\x0B\"'");
                 if ($value !== '') {
+                    $out[$key] = $value;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    protected function extractIdListTargets(string $question): array
+    {
+        if (! preg_match_all('/\b(?:id|nomor)\b\s*[:=]?\s*(\d+)/iu', $question, $matches)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', $matches[1])));
+    }
+
+
+    protected function extractBulkItems(string $question, ?string $entity = null, ?string $operation = null): array
+    {
+        $text = trim($question);
+
+        if ($operation === 'create') {
+            $blocks = $this->extractCreateBlocks($text);
+            if (! empty($blocks)) {
+                $items = [];
+                foreach ($blocks as $block) {
+                    foreach ($this->parseCreateBlockItems($block, $entity, $operation) as $item) {
+                        if (! empty($item)) {
+                            $items[] = $item;
+                        }
+                    }
+                }
+
+                return $items;
+            }
+        }
+
+        $start = strpos($text, '[');
+
+        if ($start === false) {
+            return [];
+        }
+
+        $outer = $this->extractBracketedSection($text, $start);
+        if ($outer === null) {
+            return [];
+        }
+
+        return $this->parseBracketPayloadItems($outer, $entity, $operation);
+    }
+
+    protected function extractCreateBlocks(string $text): array
+    {
+        $blocks = [];
+        $offset = 0;
+
+        while (preg_match('/(?:\b[A-Za-z_][A-Za-z0-9_\\\\]*\s*(?:::|->)\s*)?create\s*\(/i', $text, $match, PREG_OFFSET_CAPTURE, $offset)) {
+            $matchStart = $match[0][1];
+            $matchLength = strlen($match[0][0]);
+            $searchStart = $matchStart + $matchLength;
+
+            $open = strpos($text, '[', $searchStart);
+            if ($open === false) {
+                $offset = $searchStart;
+                continue;
+            }
+
+            $body = $this->extractBracketedSection($text, $open);
+            if ($body !== null) {
+                $blocks[] = $body;
+            }
+
+            $offset = $open + 1;
+        }
+
+        return $blocks;
+    }
+
+    protected function parseBracketPayloadItems(string $body, ?string $entity = null, ?string $operation = null): array
+    {
+        $segments = $this->splitTopLevelArraySegments($body);
+        $items = [];
+
+        if ($operation === 'create' && $this->looksLikeSingleAssocArray($body, $segments)) {
+            $assoc = $this->extractPhpArrayPairs($body);
+            if (! empty($assoc)) {
+                $normalized = $this->normalizeBulkItemForOperation($assoc, $entity, $operation);
+                if (! empty($normalized)) {
+                    $items[] = $normalized;
+                }
+            }
+
+            return $items;
+        }
+
+        foreach ($segments as $segment) {
+            $parsed = $this->parseArrayItem($segment);
+
+            if ($parsed === null) {
+                continue;
+            }
+
+            if (is_array($parsed)) {
+                $normalized = $this->normalizeBulkItemForOperation($parsed, $entity, $operation);
+                if (! empty($normalized)) {
+                    $items[] = $normalized;
+                }
+
+                continue;
+            }
+
+            if (in_array($operation, ['delete', 'restore', 'read'], true)) {
+                $target = $this->normalizeScalarBulkTarget($parsed, $entity);
+                if (! empty($target)) {
+                    $items[] = ['target' => $target];
+                }
+            }
+        }
+
+        return $items;
+    }
+
+    protected function parseCreateBlockItems(string $body, ?string $entity = null, ?string $operation = null): array
+    {
+        $body = trim($body);
+
+        if ($body === '') {
+            return [];
+        }
+
+        return $this->parseBracketPayloadItems($body, $entity, $operation);
+    }
+
+    protected function looksLikeSingleAssocArray(string $body, array $segments): bool
+    {
+        if (! str_contains($body, '=>')) {
+            return false;
+        }
+
+        foreach ($segments as $segment) {
+            if (preg_match('/^\s*\[/', trim($segment))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected function extractBracketedSection(string $text, int $startPos): ?string
+    {
+        $depth = 0;
+        $inString = false;
+        $quote = null;
+        $len = strlen($text);
+
+        for ($i = $startPos; $i < $len; $i++) {
+            $ch = $text[$i];
+            $prev = $i > 0 ? $text[$i - 1] : '';
+
+            if ($inString) {
+                if ($ch === $quote && $prev !== '\\') {
+                    $inString = false;
+                    $quote = null;
+                }
+                continue;
+            }
+
+            if ($ch === "'" || $ch === '"') {
+                $inString = true;
+                $quote = $ch;
+                continue;
+            }
+
+            if ($ch === '[') {
+                $depth++;
+                continue;
+            }
+
+            if ($ch === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $startPos + 1, $i - $startPos - 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function splitTopLevelArraySegments(string $body): array
+    {
+        $segments = [];
+        $depth = 0;
+        $inString = false;
+        $quote = null;
+        $start = 0;
+        $len = strlen($body);
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $body[$i];
+            $prev = $i > 0 ? $body[$i - 1] : '';
+
+            if ($inString) {
+                if ($ch === $quote && $prev !== '\\') {
+                    $inString = false;
+                    $quote = null;
+                }
+                continue;
+            }
+
+            if ($ch === "'" || $ch === '"') {
+                $inString = true;
+                $quote = $ch;
+                continue;
+            }
+
+            if ($ch === '[') {
+                $depth++;
+                continue;
+            }
+
+            if ($ch === ']') {
+                $depth--;
+                continue;
+            }
+
+            if ($ch === ',' && $depth === 0) {
+                $segment = trim(substr($body, $start, $i - $start));
+                if ($segment !== '') {
+                    $segments[] = $segment;
+                }
+                $start = $i + 1;
+            }
+        }
+
+        $last = trim(substr($body, $start));
+        if ($last !== '') {
+            $segments[] = $last;
+        }
+
+        return $segments;
+    }
+
+    protected function parseArrayItem(string $segment): mixed
+    {
+        $segment = trim($segment);
+
+        if ($segment === '') {
+            return null;
+        }
+
+        // Terima item array dalam bentuk:
+        // [ 'name' => '...', ... ]
+        // maupun potongan teks array yang sudah dipisah di level teratas.
+        if ($segment[0] === '[' && str_ends_with($segment, ']')) {
+            $segment = trim(substr($segment, 1, -1));
+        }
+
+        $assoc = $this->extractPhpArrayPairs($segment);
+        if (! empty($assoc)) {
+            return $assoc;
+        }
+
+        return $this->parseScalarLiteral($segment);
+    }
+
+    protected function parseScalarLiteral(string $value): mixed
+    {
+        $value = trim($value, " \t\n\r\0\x0B");
+
+        if ($value === '') {
+            return null;
+        }
+
+        if ((str_starts_with($value, "'") && str_ends_with($value, "'")) || (str_starts_with($value, '"') && str_ends_with($value, '"'))) {
+            $value = substr($value, 1, -1);
+        }
+
+        $low = mb_strtolower($value);
+
+        if ($low === 'null') {
+            return null;
+        }
+
+        if ($low === 'true') {
+            return true;
+        }
+
+        if ($low === 'false') {
+            return false;
+        }
+
+        if (is_numeric($value)) {
+            return str_contains($value, '.') ? (float) $value : (int) $value;
+        }
+
+        return $value;
+    }
+
+    protected function normalizeBulkItemForOperation(array $item, ?string $entity = null, ?string $operation = null): array
+    {
+        if ($operation === 'create') {
+            $data = $this->normalizeData($item);
+            return $data;
+        }
+
+        if ($operation === 'update') {
+            return $item;
+        }
+
+        if (in_array($operation, ['delete', 'restore', 'read'], true)) {
+            if (isset($item['target']) && is_array($item['target'])) {
+                $target = $this->normalizeTarget($item['target']);
+            } else {
+                $target = $this->normalizeTarget($item);
+
+                if (empty($target) && isset($item['id']) && is_numeric($item['id'])) {
+                    $target = ['id' => (int) $item['id']];
+                }
+            }
+
+            return empty($target) ? [] : ['target' => $target];
+        }
+
+        return $item;
+    }
+
+    protected function normalizeScalarBulkTarget(mixed $value, ?string $entity = null): array
+    {
+        if (is_array($value)) {
+            return $this->normalizeTarget($value);
+        }
+
+        if (is_numeric($value)) {
+            return ['id' => (int) $value];
+        }
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        $value = trim($value, " \t\n\r\0\x0B\"'");
+        if ($value === '') {
+            return [];
+        }
+
+        $fields = array_values(array_unique(array_merge(
+            ['name', 'username', 'email', 'nim', 'nip', 'ticket_number', 'url', 'key', 'title', 'task_name', 'item_name', 'rekap_date'],
+            $this->likelyTargetFields($entity)
+        )));
+
+        foreach ($fields as $field) {
+            if ($field === 'id') {
+                continue;
+            }
+
+            return [$field => $value];
+        }
+
+        return ['name' => $value];
+    }
+
+    protected function extractPhpArrayPairs(string $text): array
+    {
+        $out = [];
+
+        if (preg_match_all("/[\"']?(?<key>[a-zA-Z_][a-zA-Z0-9_]*)[\"']?\s*=>\s*(?<value>'[^']*'|\"[^\"]*\"|\d+(?:\.\d+)?|true|false|null)/u", $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $key = mb_strtolower(trim($match['key']));
+                $value = trim($match['value'], " \t\n\r\0\x0B\"'");
+
+                if ($value === 'null') {
+                    $out[$key] = null;
+                } elseif (in_array(mb_strtolower($value), ['true', 'false'], true)) {
+                    $out[$key] = mb_strtolower($value) === 'true';
+                } elseif (is_numeric($value)) {
+                    $out[$key] = str_contains($value, '.') ? (float) $value : (int) $value;
+                } else {
                     $out[$key] = $value;
                 }
             }

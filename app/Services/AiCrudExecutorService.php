@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -162,6 +163,12 @@ class AiCrudExecutorService
 
     protected function create(string $table, string $entity, array $payload): array
     {
+        $items = $this->normalizeBulkItems($payload['items'] ?? $payload['data'] ?? [], 'create', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkCreate($table, $entity, $items);
+        }
+
         $data = $this->normalizeData($payload['data'] ?? $payload);
         unset($data['id'], $data['created_at'], $data['updated_at'], $data['deleted_at'], $data['delete_at']);
 
@@ -189,6 +196,12 @@ class AiCrudExecutorService
             return $fkCheck;
         }
 
+        $data = $this->prepareCreateData($table, $data);
+        $uniqueCheck = $this->detectUniqueConflict($table, $data);
+        if (($uniqueCheck['ok'] ?? false) === false) {
+            return $uniqueCheck;
+        }
+
         $data = $this->stampForInsert($table, $data);
         $id = DB::table($table)->insertGetId($data);
 
@@ -200,6 +213,309 @@ class AiCrudExecutorService
         ];
     }
 
+    protected function bulkCreate(string $table, string $entity, array $items): array
+    {
+        $required = $this->requiredCreateFields[$table] ?? [];
+        $prepared = [];
+        $skipped = [];
+        $softDeletedDuplicates = [];
+
+        foreach ($items as $index => $item) {
+            $data = $this->normalizeData($item);
+            unset($data['id'], $data['created_at'], $data['updated_at'], $data['deleted_at'], $data['delete_at']);
+
+            $data = $this->filterWritableColumns($table, $data, true);
+
+            $missing = $this->missingRequiredFields($data, $required);
+            if (! empty($missing)) {
+                return [
+                    'ok' => false,
+                    'status' => 'missing_fields',
+                    'message' => 'Item #' . ($index + 1) . ' belum lengkap: ' . implode(', ', $missing),
+                    'item_index' => $index,
+                    'missing_fields' => $missing,
+                ];
+            }
+
+            $enumCheck = $this->validateEnumFields($table, $data);
+            if (($enumCheck['ok'] ?? false) === false) {
+                $enumCheck['item_index'] = $index;
+                return $enumCheck;
+            }
+
+            $fkCheck = $this->validateForeignKeys($table, $data);
+            if (($fkCheck['ok'] ?? false) === false) {
+                $fkCheck['item_index'] = $index;
+                return $fkCheck;
+            }
+
+            $data = $this->prepareCreateData($table, $data);
+            $uniqueCheck = $this->detectUniqueConflict($table, $data);
+            if (($uniqueCheck['ok'] ?? false) === false) {
+                $skippedItem = [
+                    'index' => $index,
+                    'status' => 'duplicate',
+                    'duplicate_field' => $uniqueCheck['duplicate_field'] ?? null,
+                    'duplicate_value' => $uniqueCheck['duplicate_value'] ?? null,
+                    'duplicate_type' => $uniqueCheck['status'] ?? 'duplicate_found',
+                    'duplicate_rows' => $uniqueCheck['duplicate_rows'] ?? [],
+                ];
+
+                if (($uniqueCheck['status'] ?? '') === 'duplicate_soft_deleted') {
+                    $softDeletedDuplicates[] = $skippedItem;
+                } else {
+                    $skipped[] = $skippedItem;
+                }
+
+                continue;
+            }
+
+            $prepared[] = $this->stampForInsert($table, $data);
+        }
+
+        if (empty($prepared)) {
+            if (! empty($softDeletedDuplicates)) {
+                return [
+                    'ok' => false,
+                    'status' => 'duplicate_soft_deleted',
+                    'message' => $this->formatSoftDeletedDuplicateMessage($entity, $softDeletedDuplicates),
+                    'skipped' => $skipped,
+                    'soft_deleted_duplicates' => $softDeletedDuplicates,
+                    'mode' => 'bulk',
+                ];
+            }
+
+            return [
+                'ok' => false,
+                'status' => 'duplicate_found',
+                'message' => ! empty($skipped)
+                    ? 'Semua item dilewati karena data duplikat pada kolom unik.'
+                    : 'Tidak ada data yang bisa dibuat.',
+                'skipped' => $skipped,
+                'mode' => 'bulk',
+            ];
+        }
+
+        $ids = [];
+
+        DB::transaction(function () use ($table, $prepared, &$ids) {
+            foreach ($prepared as $data) {
+                $ids[] = DB::table($table)->insertGetId($data);
+            }
+        });
+
+        $message = 'Berhasil membuat ' . count($ids) . ' data ' . $this->entityLabel($entity) . ' sekaligus.' . (! empty($skipped) ? ' ' . count($skipped) . ' item dilewati karena duplikat.' : '');
+        if (! empty($softDeletedDuplicates)) {
+            $message .= ' ' . $this->formatSoftDeletedDuplicateMessage($entity, $softDeletedDuplicates);
+        }
+
+        return [
+            'ok' => true,
+            'status' => 'success',
+            'message' => $message,
+            'count' => count($ids),
+            'ids' => $ids,
+            'skipped' => $skipped,
+            'soft_deleted_duplicates' => $softDeletedDuplicates,
+            'mode' => 'bulk',
+        ];
+    }
+
+    protected function prepareCreateData(string $table, array $data): array
+    {
+        if ($table === 'users' && array_key_exists('password', $data) && $data['password'] !== null && $data['password'] !== '') {
+            $data['password'] = $this->hashPassword($data['password']);
+        }
+
+        return $data;
+    }
+
+    protected function hashPassword(mixed $value): string
+    {
+        $password = trim((string) $value);
+
+        if ($password === '') {
+            return $password;
+        }
+
+        if (preg_match('/^\$(2y|2a|2b|argon2id|argon2i)\$/', $password)) {
+            return $password;
+        }
+
+        return Hash::make($password);
+    }
+
+    protected function detectUniqueConflict(string $table, array $data): array
+    {
+        $uniqueColumns = $this->uniqueColumns($table);
+        $softDeleteColumn = $this->softDeleteColumn($table);
+
+        foreach ($uniqueColumns as $column) {
+            if (! array_key_exists($column, $data)) {
+                continue;
+            }
+
+            $value = $data[$column];
+
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            try {
+                $rows = DB::table($table)
+                    ->where($column, $value)
+                    ->orderBy('id')
+                    ->limit(20)
+                    ->get($this->previewColumns($table));
+            } catch (Throwable $e) {
+                continue;
+            }
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $duplicateRows = [];
+            $hasActive = false;
+            $hasSoftDeleted = false;
+
+            foreach ($rows as $row) {
+                $row = $this->enrichRowWithRelations($table, $row);
+                $rowArray = $this->toArray($row);
+                $duplicateRows[] = $rowArray;
+
+                $trashed = $softDeleteColumn !== null && ! empty($rowArray[$softDeleteColumn]);
+                if ($trashed) {
+                    $hasSoftDeleted = true;
+                } else {
+                    $hasActive = true;
+                }
+            }
+
+            if ($hasActive) {
+                return [
+                    'ok' => false,
+                    'status' => 'duplicate_found',
+                    'message' => "Data dengan {$column} tersebut sudah ada.",
+                    'duplicate_field' => $column,
+                    'duplicate_value' => $value,
+                    'duplicate_rows' => $duplicateRows,
+                    'duplicate_type' => 'active',
+                ];
+            }
+
+            if ($hasSoftDeleted) {
+                return [
+                    'ok' => false,
+                    'status' => 'duplicate_soft_deleted',
+                    'message' => $this->formatSoftDeletedDuplicateMessage($this->tableToEntity($table), [[
+                        'duplicate_field' => $column,
+                        'duplicate_value' => $value,
+                        'duplicate_rows' => $duplicateRows,
+                    ]]),
+                    'duplicate_field' => $column,
+                    'duplicate_value' => $value,
+                    'duplicate_rows' => $duplicateRows,
+                    'duplicate_type' => 'soft_deleted',
+                ];
+            }
+        }
+
+        return [
+            'ok' => true,
+            'status' => 'ok',
+        ];
+    }
+
+    protected function formatSoftDeletedDuplicateMessage(string $entity, array $duplicates): string
+    {
+        if (empty($duplicates)) {
+            return 'Data duplikat dengan data soft delete ditemukan.';
+        }
+
+        $lines = ['Data yang Anda CRUD duplikat dengan data soft delete ini:'];
+
+        foreach ($duplicates as $group) {
+            foreach (($group['duplicate_rows'] ?? []) as $row) {
+                $lines[] = '- ' . $this->summarizeDuplicateRow($entity, $row);
+            }
+        }
+
+        return implode("
+", $lines);
+    }
+
+    protected function summarizeDuplicateRow(string $entity, array $row): string
+    {
+        $softDeleteColumn = $this->softDeleteColumn($this->resolveTableName($entity) ?? $entity) ?? 'deleted_at';
+        $fields = match (mb_strtolower(trim((string) $entity))) {
+            'users' => ['id', 'name', 'username', 'email', 'nim', 'nip'],
+            'roles' => ['id', 'name'],
+            'software' => ['id', 'name', 'developer', 'version'],
+            'tickets' => ['id', 'ticket_number', 'type', 'status'],
+            'trusted_websites' => ['id', 'name', 'url'],
+            'rekaps' => ['id', 'rekap_date'],
+            default => ['id', 'name', 'title', 'username', 'ticket_number', 'url', 'task_name', 'item_name'],
+        };
+
+        $parts = [];
+
+        foreach ($fields as $field) {
+            if (isset($row[$field]) && $row[$field] !== '') {
+                $parts[] = $field . '=' . (is_scalar($row[$field]) ? $row[$field] : json_encode($row[$field], JSON_UNESCAPED_UNICODE));
+            }
+        }
+
+        if (! empty($row[$softDeleteColumn] ?? null)) {
+            $parts[] = 'deleted_at=' . $row[$softDeleteColumn];
+        }
+
+        if (empty($parts) && isset($row['id'])) {
+            $parts[] = 'id=' . $row['id'];
+        }
+
+        return implode(', ', $parts);
+    }
+
+    protected function resolveTableName(string $entity): ?string
+    {
+        $entity = mb_strtolower(trim($entity));
+
+        return in_array($entity, $this->allowedTables, true) ? $entity : null;
+    }
+
+    protected function uniqueColumns(string $table): array
+    {
+        try {
+            $connection = DB::connection();
+            if (method_exists($connection, 'getDriverName') && $connection->getDriverName() !== 'mysql') {
+                return [];
+            }
+
+            $database = method_exists($connection, 'getDatabaseName') ? $connection->getDatabaseName() : null;
+            if (! $database) {
+                return [];
+            }
+
+            $rows = DB::select(
+                'SELECT COLUMN_NAME FROM information_schema.statistics WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND NON_UNIQUE = 0 AND INDEX_NAME <> "PRIMARY" ORDER BY SEQ_IN_INDEX ASC',
+                [$database, $table]
+            );
+
+            $columns = [];
+            foreach ($rows as $row) {
+                $column = is_object($row) ? ($row->COLUMN_NAME ?? null) : ($row['COLUMN_NAME'] ?? null);
+                if ($column) {
+                    $columns[] = $column;
+                }
+            }
+
+            return array_values(array_unique($columns));
+        } catch (Throwable $e) {
+            return [];
+        }
+    }
+
     protected function read(string $table, string $entity, array $payload): array
     {
         $target = $this->normalizeTarget($payload['target'] ?? []);
@@ -207,6 +523,11 @@ class AiCrudExecutorService
         $limit = (int) ($filters['limit'] ?? 10);
         $includeDeleted = (bool) ($filters['include_deleted'] ?? false);
         $onlyDeleted = (bool) ($filters['only_deleted'] ?? false);
+        $items = $this->normalizeBulkItems($payload['items'] ?? $payload['targets'] ?? [], 'read', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkRead($table, $entity, $payload, $items);
+        }
 
         $query = DB::table($table);
         $this->applySoftDeleteScope($query, $table, $includeDeleted, $onlyDeleted);
@@ -251,6 +572,12 @@ class AiCrudExecutorService
 
     protected function update(string $table, string $entity, array $payload): array
     {
+        $items = $this->normalizeBulkItems($payload['items'] ?? [], 'update', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkUpdate($table, $entity, $items);
+        }
+
         $data = $this->normalizeData($payload['data'] ?? []);
         $target = $this->normalizeTarget($payload['target'] ?? null);
 
@@ -312,8 +639,72 @@ class AiCrudExecutorService
         ];
     }
 
+    protected function bulkUpdate(string $table, string $entity, array $items): array
+    {
+        $results = [];
+        $affectedTotal = 0;
+
+        DB::transaction(function () use ($table, $entity, $items, &$results, &$affectedTotal) {
+            foreach ($items as $index => $item) {
+                $dataSource = (is_array($item) && array_key_exists('data', $item)) ? $item['data'] : $item;
+                $data = $this->normalizeData($dataSource);
+                $target = $this->normalizeBulkTargetItem($item, $entity);
+
+                unset($data['id'], $data['created_at'], $data['updated_at'], $data['deleted_at'], $data['delete_at']);
+                $data = $this->filterWritableColumns($table, $data, false);
+
+                if (empty($data)) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' tidak memiliki data update yang valid.');
+                }
+
+                $resolved = $this->resolveTargets($table, $target);
+
+                if (($resolved['ok'] ?? false) === false || ($resolved['status'] ?? '') === 'ambiguous' || empty($resolved['row']) || ! isset($resolved['row']->id)) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' target update tidak ditemukan.');
+                }
+
+                $enumCheck = $this->validateEnumFields($table, $data);
+                if (($enumCheck['ok'] ?? false) === false) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' ' . ($enumCheck['message'] ?? 'Enum tidak valid.'));
+                }
+
+                $fkCheck = $this->validateForeignKeys($table, $data);
+                if (($fkCheck['ok'] ?? false) === false) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' ' . ($fkCheck['message'] ?? 'FK tidak valid.'));
+                }
+
+                $data = $this->stampForUpdate($table, $data);
+                $affected = DB::table($table)->where('id', $resolved['row']->id)->update($data);
+                $affectedTotal += $affected;
+                $results[] = ['index' => $index, 'id' => $resolved['row']->id, 'affected' => $affected];
+            }
+        });
+
+        return [
+            'ok' => true,
+            'status' => 'success',
+            'message' => 'Berhasil mengubah ' . count($results) . ' data ' . $this->entityLabel($entity) . ' sekaligus.',
+            'count' => count($results),
+            'affected' => $affectedTotal,
+            'results' => $results,
+            'mode' => 'bulk',
+        ];
+    }
+
     protected function delete(string $table, string $entity, array $payload): array
     {
+        $items = $this->normalizeBulkItems($payload['items'] ?? $payload['targets'] ?? [], 'delete', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkDelete($table, $entity, $items);
+        }
+
+        $items = $this->normalizeBulkItems($payload['items'] ?? $payload['targets'] ?? [], 'restore', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkRestore($table, $entity, $items);
+        }
+
         $target = $this->normalizeTarget($payload['target'] ?? null);
 
         if (isset($payload['id']) && is_numeric($payload['id'])) {
@@ -328,6 +719,8 @@ class AiCrudExecutorService
             ];
         }
 
+        $includeDeleted = (bool) ($payload['filters']['include_deleted'] ?? false);
+        $onlyDeleted = (bool) ($payload['filters']['only_deleted'] ?? false);
         $resolved = $this->resolveTargets($table, $target, $includeDeleted, $onlyDeleted);
 
         if (($resolved['ok'] ?? false) === false) {
@@ -363,6 +756,44 @@ class AiCrudExecutorService
         ];
     }
 
+    protected function bulkDelete(string $table, string $entity, array $items): array
+    {
+        $results = [];
+        $affectedTotal = 0;
+
+        DB::transaction(function () use ($table, $entity, $items, &$results, &$affectedTotal) {
+            foreach ($items as $index => $item) {
+                $target = $this->normalizeBulkTargetItem($item, $entity);
+
+                if (empty($target)) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' target delete tidak boleh kosong.');
+                }
+
+                $resolved = $this->resolveTargets($table, $target, false, false);
+
+                if (($resolved['ok'] ?? false) === false || ($resolved['status'] ?? '') === 'ambiguous' || empty($resolved['row']) || ! isset($resolved['row']->id)) {
+                    throw new \RuntimeException('Item #' . ($index + 1) . ' target delete tidak ditemukan.');
+                }
+
+                $cascadeReport = [];
+                $visited = [];
+                $this->applyDeleteCascade($table, (int) $resolved['row']->id, $cascadeReport, $visited);
+                $affectedTotal += (int) ($cascadeReport['affected'] ?? 1);
+                $results[] = ['index' => $index, 'id' => $resolved['row']->id, 'affected' => (int) ($cascadeReport['affected'] ?? 1)];
+            }
+        });
+
+        return [
+            'ok' => true,
+            'status' => 'success',
+            'message' => 'Berhasil menghapus ' . count($results) . ' data ' . $this->entityLabel($entity) . ' sekaligus.',
+            'count' => count($results),
+            'affected' => $affectedTotal,
+            'results' => $results,
+            'mode' => 'bulk',
+        ];
+    }
+
     protected function restore(string $table, string $entity, array $payload): array
     {
         if (! $this->hasSoftDeletes($table)) {
@@ -371,6 +802,12 @@ class AiCrudExecutorService
                 'status' => 'restore_not_supported',
                 'message' => 'Tabel ini tidak mendukung restore.',
             ];
+        }
+
+        $items = $this->normalizeBulkItems($payload['items'] ?? $payload['targets'] ?? [], 'restore', $entity);
+
+        if (! empty($items)) {
+            return $this->bulkRestore($table, $entity, $items);
         }
 
         $target = $this->normalizeTarget($payload['target'] ?? null);
@@ -582,9 +1019,14 @@ class AiCrudExecutorService
                 continue;
             }
 
+            $childSoftDeleteColumn = $this->softDeleteColumn($childTable);
+            if ($childSoftDeleteColumn === null) {
+                continue;
+            }
+
             $childIds = DB::table($childTable)
                 ->where($fk, $id)
-                ->whereNotNull($this->softDeleteColumn($table) ?? 'deleted_at')
+                ->whereNotNull($childSoftDeleteColumn)
                 ->pluck('id')
                 ->map(fn ($value) => (int) $value)
                 ->all();
@@ -595,9 +1037,15 @@ class AiCrudExecutorService
         }
 
         if ($this->hasSoftDeletes($table)) {
+            $deletedColumn = $this->softDeleteColumn($table);
+
+            if ($deletedColumn === null) {
+                return $report;
+            }
+
             $affected = DB::table($table)
                 ->where('id', $id)
-                ->whereNotNull($this->softDeleteColumn($table) ?? 'deleted_at')
+                ->whereNotNull($deletedColumn)
                 ->update([
                     $deletedColumn => null,
                     'updated_at' => now(),
@@ -933,6 +1381,250 @@ class AiCrudExecutorService
         }
 
         return $data;
+    }
+
+    protected function normalizeBulkItems(mixed $value, ?string $operation = null, ?string $entity = null): array
+    {
+        if (is_array($value) && isset($value['items']) && is_array($value['items'])) {
+            return $this->normalizeBulkItems($value['items'], $operation, $entity);
+        }
+
+        if (is_array($value) && isset($value['targets']) && is_array($value['targets'])) {
+            return $this->normalizeBulkItems($value['targets'], $operation, $entity);
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        if (! array_is_list($value)) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                $out[] = $item;
+                continue;
+            }
+
+            if (in_array($operation, ['delete', 'restore', 'read'], true)) {
+                $target = $this->normalizeScalarBulkTarget($item, $entity);
+                if (! empty($target)) {
+                    $out[] = ['target' => $target];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    protected function normalizeBulkTargetItem(mixed $item, ?string $entity = null): array
+    {
+        if (is_array($item)) {
+            if (isset($item['target']) && is_array($item['target'])) {
+                $target = $this->normalizeTarget($item['target']);
+                if (! empty($target)) {
+                    return $target;
+                }
+            }
+
+            if (isset($item['id']) && is_numeric($item['id'])) {
+                return ['id' => (int) $item['id']];
+            }
+
+            $target = $this->normalizeTarget($item);
+            if (! empty($target)) {
+                return $target;
+            }
+        }
+
+        return $this->normalizeScalarBulkTarget($item, $entity);
+    }
+
+    protected function normalizeScalarBulkTarget(mixed $value, ?string $entity = null): array
+    {
+        if (is_array($value)) {
+            return $this->normalizeTarget($value);
+        }
+
+        if (is_numeric($value)) {
+            return ['id' => (int) $value];
+        }
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        $value = trim($value);
+        if ($value === '') {
+            return [];
+        }
+
+        $fields = array_values(array_unique(array_merge(
+            $this->likelyTargetFields($entity),
+            ['name', 'username', 'email', 'nim', 'nip', 'ticket_number', 'url', 'key', 'title', 'task_name', 'item_name', 'rekap_date']
+        )));
+
+        foreach ($fields as $field) {
+            if ($field === 'id') {
+                continue;
+            }
+
+            return [$field => $value];
+        }
+
+        return ['name' => $value];
+    }
+
+    protected function bulkRead(string $table, string $entity, array $payload, array $items): array
+    {
+        $filters = $payload['filters'] ?? [];
+        $includeDeleted = (bool) ($filters['include_deleted'] ?? false);
+        $onlyDeleted = (bool) ($filters['only_deleted'] ?? false);
+
+        $rows = [];
+        $results = [];
+        $ambiguous = [];
+        $missing = [];
+
+        foreach ($items as $index => $item) {
+            $target = $this->normalizeBulkTargetItem($item, $entity);
+
+            if (empty($target)) {
+                $missing[] = $index;
+                $results[] = [
+                    'index' => $index,
+                    'status' => 'target_missing',
+                ];
+                continue;
+            }
+
+            $resolved = $this->resolveTargets($table, $target, $includeDeleted, $onlyDeleted);
+
+            if (($resolved['ok'] ?? false) === false) {
+                return $resolved;
+            }
+
+            if (($resolved['status'] ?? '') === 'ambiguous') {
+                $ambiguous[] = [
+                    'index' => $index,
+                    'matches' => $resolved['matches'] ?? [],
+                    'target' => $target,
+                ];
+                continue;
+            }
+
+            if (empty($resolved['row']) || ! isset($resolved['row']->id)) {
+                $results[] = [
+                    'index' => $index,
+                    'status' => 'not_found',
+                    'target' => $target,
+                ];
+                continue;
+            }
+
+            $row = $this->toArray($resolved['row']);
+            $rows[] = $row;
+            $results[] = [
+                'index' => $index,
+                'status' => 'found',
+                'id' => $resolved['row']->id,
+                'row' => $row,
+            ];
+        }
+
+        if (! empty($ambiguous)) {
+            return [
+                'ok' => false,
+                'status' => 'ambiguous',
+                'message' => 'Beberapa target masih ambigu.',
+                'matches' => $ambiguous,
+                'count' => count($rows),
+                'results' => $results,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'status' => ! empty($rows) ? 'success' : 'not_found',
+            'message' => ! empty($rows)
+                ? 'Berhasil membaca ' . count($rows) . ' data ' . $this->entityLabel($entity) . ' sekaligus.'
+                : 'Data tidak ditemukan.',
+            'rows' => $rows,
+            'count' => count($rows),
+            'results' => $results,
+            'soft_deleted_count' => $this->softDeletedCount($table, $filters),
+            'active_count' => count($rows),
+        ];
+    }
+
+    protected function bulkRestore(string $table, string $entity, array $items): array
+    {
+        $results = [];
+        $affectedTotal = 0;
+        $missing = [];
+
+        DB::transaction(function () use ($table, $entity, $items, &$results, &$affectedTotal, &$missing) {
+            foreach ($items as $index => $item) {
+                $target = $this->normalizeBulkTargetItem($item, $entity);
+
+                if (empty($target)) {
+                    $missing[] = [
+                        'index' => $index,
+                        'status' => 'target_missing',
+                        'target' => $item,
+                    ];
+                    continue;
+                }
+
+                $resolved = $this->resolveTargets($table, $target, true, true);
+
+                if (($resolved['ok'] ?? false) === false || ($resolved['status'] ?? '') === 'ambiguous' || empty($resolved['row']) || ! isset($resolved['row']->id)) {
+                    $missing[] = [
+                        'index' => $index,
+                        'status' => 'not_found',
+                        'target' => $target,
+                    ];
+                    continue;
+                }
+
+                $cascadeReport = [];
+                $visited = [];
+                $this->applyRestoreCascade($table, (int) $resolved['row']->id, $cascadeReport, $visited);
+                $affected = (int) ($cascadeReport['affected'] ?? 1);
+                $affectedTotal += $affected;
+                $results[] = ['index' => $index, 'id' => $resolved['row']->id, 'affected' => $affected];
+            }
+        });
+
+        if (empty($results)) {
+            return [
+                'ok' => false,
+                'status' => 'not_found',
+                'message' => 'Target restore tidak ditemukan.',
+                'missing' => $missing,
+                'mode' => 'bulk',
+            ];
+        }
+
+        $message = 'Berhasil memulihkan ' . count($results) . ' data ' . $this->entityLabel($entity) . ' sekaligus.';
+        if (! empty($missing)) {
+            $message .= ' ' . count($missing) . ' target tidak ditemukan.';
+        }
+
+        return [
+            'ok' => true,
+            'status' => ! empty($missing) ? 'partial' : 'success',
+            'message' => $message,
+            'count' => count($results),
+            'affected' => $affectedTotal,
+            'results' => $results,
+            'missing' => $missing,
+            'restored' => true,
+            'mode' => 'bulk',
+        ];
     }
 
     protected function normalizeData(mixed $value): array

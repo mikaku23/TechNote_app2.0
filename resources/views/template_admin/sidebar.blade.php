@@ -111,26 +111,27 @@
 
             <!-- AI -->
             <div class="dropdown-menu">
-                <a href="{{ route('admin.ai.index') }}" 
-                class="dropdown-item {{ $menu == 'ai' ? 'active' : '' }}" data-parent="ai">
+                <a href="{{ route('admin.ai.index') }}"
+                    class="dropdown-item {{ $menu == 'ai' ? 'active' : '' }}"
+                    data-parent="ai">
                     <i data-lucide="layout-dashboard"></i>
                     <span>AI Dashboard</span>
                 </a>
 
-                <a href="{{ route('admin.ai.tasks') }}" 
-                class="dropdown-item {{ $menu == 'tasks' ? 'active' : '' }}" data-parent="ai">
+                <a href="{{ route('ai.tasks') }}"
+                    class="dropdown-item {{ $menu == 'tasks' ? 'active' : '' }}" data-parent="ai">
                     <i data-lucide="list-todo"></i>
                     <span>AI Tasks</span>
                 </a>
 
-                <a href="{{ route('admin.ai.rekom') }}" 
-                class="dropdown-item {{ $menu == 'rekom' ? 'active' : '' }}" data-parent="ai">
+                <a href="{{ route('ai.rekom') }}"
+                    class="dropdown-item {{ $menu == 'rekom' ? 'active' : '' }}" data-parent="ai">
                     <i data-lucide="sparkles"></i>
                     <span>AI Recommendations</span>
                 </a>
 
-                <a href="{{ route('admin.ai.log') }}" 
-                class="dropdown-item {{ $menu == 'logs' ? 'active' : '' }}" data-parent="ai">
+                <a href="{{ route('ai.log') }}"
+                    class="dropdown-item {{ $menu == 'logs' ? 'active' : '' }}" data-parent="ai">
                     <i data-lucide="file-text"></i>
                     <span>AI Logs</span>
                 </a>
@@ -168,11 +169,6 @@
                     class="dropdown-item {{ $menu == 'user-activity' ? 'active' : '' }}" data-parent="monitoring">
                     <i data-lucide="history"></i>
                     <span>User Activities</span>
-                </a>
-
-                <a href="#" class="dropdown-item" data-parent="monitoring">
-                    <i data-lucide="bot-message-square"></i>
-                    <span>AI Activities</span>
                 </a>
             </div>
         </div>
@@ -242,11 +238,6 @@
                     class="dropdown-item {{ $menu == 'maintenance' ? 'active' : '' }}    " data-parent="system">
                     <i data-lucide="shield-alert"></i>
                     <span>Maintenance</span>
-                </a>
-
-                <a href="#" class="dropdown-item" data-parent="system">
-                    <i data-lucide="shield-ban"></i>
-                    <span>Anti AI Mode</span>
                 </a>
             </div>
 
