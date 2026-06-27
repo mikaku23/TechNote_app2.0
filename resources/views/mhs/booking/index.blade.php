@@ -388,7 +388,7 @@
         <div class="weekly-table-wrap">
             <table class="weekly-table">
                 <thead>
-                    <tr>
+                    <tr style="align-items: center;">
                         <th>Hari</th>
                         <th>Software</th>
                         <th>Status</th>
@@ -404,7 +404,7 @@
                     $status = $ticket?->status;
                     @endphp
 
-                    <tr>
+                    <tr style="align-items: center;">
                         <td>
                             <div class="day-cell">
                                 <strong>{{ $row['day'] }}</strong>

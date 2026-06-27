@@ -15,7 +15,9 @@ use App\Http\Controllers\SoftwareController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TrustedWebsiteController;
 use App\Http\Controllers\UserActivityController;
+use App\Http\Controllers\UserAiController;
 use App\Http\Controllers\UserController;
+
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -27,7 +29,6 @@ Route::post('/login', [AuthController::class, 'login'])->name('login.process');
 Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth')
     ->name('logout');
-
 
 Route::get('/forgot-password/reset', [AuthController::class, 'resetForgotPasswordFlow'])
     ->name('password.forgot.reset');
@@ -148,26 +149,39 @@ Route::middleware(['auth', 'role:Admin'])->group(function () {
     Route::resource('user-activity', UserActivityController::class)->only(['index', 'show']);
 });
 
+Route::middleware(['auth'])->group(function () {
 
+    Route::middleware('role:Mahasiswa')
+        ->prefix('dashboard')
+        ->name('mahasiswa.')
+        ->group(function () {
+            Route::controller(UserAiController::class)
+                ->prefix('ai')
+                ->name('ai.')
+                ->group(function () {
+                    Route::get('/context', 'context')->name('context');
+                    Route::post('/chat', 'chat')->name('chat');
+                });
 
+            Route::get('/booking/check-availability', [MahasiswaBookingController::class, 'checkAvailability'])
+                ->name('booking.check');
 
-Route::middleware(['auth', 'role:Mahasiswa'])->group(function () {
-    Route::get(
-        '/dashboard/booking/check-availability',
-        [MahasiswaBookingController::class, 'checkAvailability']
-    )->name('mahasiswa.booking.check');
+            Route::resource('booking', MahasiswaBookingController::class)
+                ->parameters(['booking' => 'ticket']);
+        });
 
-    Route::resource('/dashboard', MahasiswaBookingController::class)
-        ->names('mahasiswa.booking')
-        ->parameters(['dashboard' => 'ticket']);
-});
+    Route::middleware('role:Dosen')
+        ->prefix('dashboard/dosen')
+        ->name('dosen.')
+        ->group(function () {
+            Route::controller(UserAiController::class)
+                ->prefix('ai')
+                ->name('ai.')
+                ->group(function () {
+                    Route::get('/context', 'context')->name('context');
+                    Route::post('/chat', 'chat')->name('chat');
+                });
 
-
-
-
-
-Route::middleware(['auth', 'role:Dosen'])->group(function () {
-    Route::get('/dashboard/dosen', [DashboardController::class, 'dosen'])->name('dashboard.dosen');
-
-    // route dosen lain di sini
+            Route::get('/', [DashboardController::class, 'dosen'])->name('dashboard');
+        });
 });
