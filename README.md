@@ -8,7 +8,7 @@
   Sistem layanan ruang teknisi STMIK Triguna Dharma berbasis Ticketing, AI, dan WhatsApp Notification.
 </p>
 
-<img src="public/assets/" width="900"/>
+<img src="public/assets/images/banner.png" width="900"/>
 
 <p>
   <img src="https://img.shields.io/badge/Laravel-12-red?style=for-the-badge&logo=laravel">
