@@ -317,6 +317,10 @@
                 <script>
                     window.location = "{{ route('mahasiswa.booking.index') }}";
                 </script>
+                @elseif($role === 'Dosen')
+                <script>
+                    window.location = "{{ route('dosen.index') }}";
+                </script>
 
                 @endif
                 @endif

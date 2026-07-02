@@ -137,4 +137,37 @@ PROMPT;
 
         return null;
     }
+
+    /**
+     * Klasifikasi intent terstruktur untuk keperluan IntentDetectorService.
+     */
+    public function classifyStructuredIntent(
+        string $message,
+        array $availablePurposes,
+        array $availableEntities = []
+    ): ?array {
+        $options = [
+            'allowed_purposes' => $availablePurposes,
+            'entities'         => $availableEntities,
+        ];
+
+        // Gunakan classifyPlan yang sudah ada
+        $result = $this->classifyPlan($message, $options);
+
+        if (! is_array($result)) {
+            return null;
+        }
+
+        // Petakan ke struktur yang diharapkan oleh IntentDetectorService
+        return [
+            'purpose'            => $result['intent'] ?? 'chat',
+            'entity'             => $result['entity'] ?? null,
+            'operation'          => $result['operation'] ?? null,
+            'source_hint'        => $result['source'] ?? null,
+            'time_scope'         => $result['time_scope'] ?? null,
+            'confidence'         => (float) ($result['confidence'] ?? 0.5),
+            'needs_clarification' => (bool) ($result['needs_clarification'] ?? false),
+            'reason'             => $result['reason'] ?? null,
+        ];
+    }
 }

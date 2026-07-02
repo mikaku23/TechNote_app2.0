@@ -9,6 +9,12 @@ use Throwable;
 
 class AiCrudExecutorService
 {
+
+    protected function getForeignKeyMap(): array
+    {
+        return $this->foreignKeyMap;
+    }
+    
     protected array $fieldAliases = [
         'nama' => 'name',
         'deskripsi' => 'description',

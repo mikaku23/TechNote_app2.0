@@ -34,6 +34,9 @@
         let busy = false;
         let activeRunId = 0;
 
+        // Mencegah state tersimpan lagi saat proses logout
+        let isLoggingOut = false;
+
         let thinkingBubble = null;
         let thinkingStatusText = null;
         let thinkingSteps = {};
@@ -62,6 +65,7 @@
                     };
                 }
             } catch (e) {}
+
             return {
                 messages: [],
                 draft: "",
@@ -69,7 +73,33 @@
             };
         }
 
+        function clearAiStorage() {
+            isLoggingOut = true;
+
+            state = {
+                messages: [],
+                draft: "",
+                openedOnce: false,
+            };
+
+            localStorage.removeItem(storageKey);
+            sessionStorage.removeItem(storageKey);
+            sessionStorage.removeItem("tn_ai_transition_rect");
+
+            if (activeInput) {
+                activeInput.value = "";
+            }
+
+            if (activeContainer) {
+                activeContainer.innerHTML = "";
+            }
+
+            renderAllMessages();
+        }
+
         function saveState() {
+            if (isLoggingOut) return;
+
             state.draft = activeInput ? activeInput.value : state.draft;
             localStorage.setItem(storageKey, JSON.stringify(state));
         }
@@ -706,8 +736,7 @@
                 if (!isInternalNav) return;
 
                 if (isLogout) {
-                    localStorage.removeItem(storageKey);
-                    sessionStorage.removeItem("tn_ai_transition_rect");
+                    clearAiStorage();
                     return;
                 }
 
@@ -964,13 +993,26 @@
         function attachGlobalExitReset() {
             document.addEventListener("click", (e) => {
                 const logout = e.target.closest(
-                    "a[href*='logout'], button[data-logout], form[data-logout]",
+                    "a[href*='logout'], button[data-logout]",
                 );
                 if (!logout) return;
 
-                localStorage.removeItem(storageKey);
-                sessionStorage.removeItem("tn_ai_transition_rect");
+                clearAiStorage();
             });
+
+            document.addEventListener(
+                "submit",
+                (e) => {
+                    const form = e.target;
+                    if (!(form instanceof HTMLFormElement)) return;
+
+                    const action = form.action || "";
+                    if (!/logout/i.test(action)) return;
+
+                    clearAiStorage();
+                },
+                true,
+            );
         }
 
         function hydrateDraft() {
@@ -1002,7 +1044,10 @@
             }
 
             playEnterTransitionFromSession();
-            window.addEventListener("beforeunload", saveState);
+
+            window.addEventListener("beforeunload", () => {
+                if (!isLoggingOut) saveState();
+            });
         }
 
         init();

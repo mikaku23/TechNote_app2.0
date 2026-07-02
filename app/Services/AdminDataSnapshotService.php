@@ -11,6 +11,12 @@ class AdminDataSnapshotService
 {
     protected int $ttlSeconds = 60;
 
+
+    protected function getForeignKeyMap(): array
+    {
+        return $this->foreignKeyMap;
+    }
+
     protected array $entities = [
         'users',
         'roles',
@@ -533,6 +539,13 @@ class AdminDataSnapshotService
 
     protected function remember(string $key, callable $callback): mixed
     {
+        // Simpan key untuk kemungkinan hapus prefix
+        $keys = Cache::get('admin_snapshot_keys', []);
+        if (!in_array($key, $keys)) {
+            $keys[] = $key;
+            Cache::put('admin_snapshot_keys', $keys, 3600);
+        }
+
         return Cache::remember($key, now()->addSeconds($this->ttlSeconds), function () use ($callback) {
             try {
                 return $callback();
@@ -550,6 +563,21 @@ class AdminDataSnapshotService
 
     protected function forgetPrefix(string $prefix): void
     {
-        // no-op for driver compatibility
+        // Jika menggunakan cache driver yang mendukung tags
+        if (method_exists(Cache::getStore(), 'tags')) {
+            Cache::tags(['admin_snapshot'])->flush();
+            return;
+        }
+
+        // Fallback: hapus secara manual dengan menyimpan daftar key
+        $keys = Cache::get('admin_snapshot_keys', []);
+        foreach ($keys as $key) {
+            if (str_starts_with($key, $prefix)) {
+                Cache::forget($key);
+            }
+        }
+        // Perbarui daftar setelah dihapus
+        $remaining = array_filter($keys, fn($k) => !str_starts_with($k, $prefix));
+        Cache::put('admin_snapshot_keys', $remaining, 3600);
     }
 }

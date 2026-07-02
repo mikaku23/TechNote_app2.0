@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdminAiController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DosenPerbaikanController;
 use App\Http\Controllers\LoginLogController;
 use App\Http\Controllers\MahasiswaBookingController;
 use App\Http\Controllers\NotificationController;
@@ -17,7 +18,6 @@ use App\Http\Controllers\TrustedWebsiteController;
 use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\UserAiController;
 use App\Http\Controllers\UserController;
-
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -171,7 +171,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
     Route::middleware('role:Dosen')
-        ->prefix('dashboard/dosen')
+       
         ->name('dosen.')
         ->group(function () {
             Route::controller(UserAiController::class)
@@ -182,6 +182,10 @@ Route::middleware(['auth'])->group(function () {
                     Route::post('/chat', 'chat')->name('chat');
                 });
 
-            Route::get('/', [DashboardController::class, 'dosen'])->name('dashboard');
+        
+
+            Route::get('/Dashboard', [DosenPerbaikanController::class, 'index'])->name('index');
+
+            Route::get('/Show/{ticket}', [DosenPerbaikanController::class, 'show'])->name('show');
         });
 });

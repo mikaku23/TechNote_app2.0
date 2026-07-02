@@ -390,8 +390,13 @@ class IntentDetectorService
     protected function refineWithAi(string $message, string $role, array $localIntent): array
     {
         $availablePurposes = ['data_lookup', 'system_action', 'summary', 'edit_text', 'complaint', 'help', 'question', 'chat'];
-        $ai = $this->openRouterService->classifyStructuredIntent($message, $availablePurposes, method_exists($this->actionService, 'availableEntities') ? $this->actionService->availableEntities() : []);
-
+        $ai = $this->openRouterService->classifyStructuredIntent(
+            $message,
+            $availablePurposes,
+            method_exists($this->actionService, 'availableEntities')
+                ? $this->actionService->availableEntities()
+                : []
+        );
         if (! is_array($ai) || empty($ai['purpose'])) {
             return $localIntent;
         }

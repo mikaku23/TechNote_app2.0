@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="{{ asset('assets/css/card.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/popupconfirmation.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/table.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/mhs-ai-widget.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/dsn-ai-widget.css') }}">
     @yield('css')
 </head>
 
@@ -25,13 +25,13 @@
     <div class="blob blob-3"></div>
 
     <main class="main">
-        @include('template_mhs.nav')
+        @include('template_dsn.nav')
 
         <section class="dashboard">
             @yield('content')
         </section>
 
-        @include('template_mhs.footer')
+        @include('template_dsn.footer')
     </main>
 
     <div id="modalContainer"></div>
@@ -67,11 +67,11 @@
         </div>
     </div>
 
-    @include('template_mhs.partials.ai-floating')
+    @include('template_dsn.partials.ai-floating')
 
     @yield('js')
     <script src="{{ asset('assets/js/script.js') }}"></script>
-    <script src="{{ asset('assets/js/mhs-ai-widget.js') }}"></script>
+    <script src="{{ asset('assets/js/dsn-ai-widget.js') }}"></script>
 </body>
 
 </html>

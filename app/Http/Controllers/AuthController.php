@@ -139,7 +139,7 @@ class AuthController extends Controller
         return match ($user->role?->name) {
             'Admin'     => redirect()->route('dashboard.admin'),
             'Mahasiswa' => redirect()->route('mahasiswa.booking.index'),
-            'Dosen'     => redirect()->route('dashboard.dosen'),
+            'Dosen'     => redirect()->route('dosen.index'),
             default     => abort(403),
         };
     }
